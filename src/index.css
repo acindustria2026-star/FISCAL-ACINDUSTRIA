@@ -1,0 +1,96 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0B0B0D;
+  --surface: #141416;
+  --surface-2: #1C1C1F;
+  --surface-3: #26262A;
+  --text: #F5F5F7;
+  --text-2: #A8A8AE;
+  --text-3: #6B6B71;
+  --border: #2A2A2E;
+  --border-soft: #1F1F22;
+  --accent: #D4A017;
+  --accent-dark: #A57D0D;
+  --accent-soft-bg: #2A2010;
+  --accent-soft-border: #4A3A1A;
+  --warn: #E85D5D;
+  --warn-soft-bg: #2E1A1A;
+  --warn-soft-border: #4A2626;
+  --amber: #F5C44A;
+  --amber-soft-bg: #2A2410;
+  --amber-soft-border: #4A3E1A;
+  --role-admin: #D4A017;
+  --role-operador: #6FB3F5;
+  --role-financeiro: #B68EE0;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-feature-settings: 'ss01', 'cv01', 'cv02';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-serif-display {
+  font-family: 'Fraunces', serif;
+}
+
+.font-mono-num {
+  font-feature-settings: 'tnum';
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-slide-up {
+  animation: slideUp 0.25s ease-out;
+}
+
+/* ---- Ajustes mobile ---- */
+
+/* iOS dá zoom em inputs com font-size < 16px. Mantém 16px no foco */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Touch targets generosos pra ações primárias (opt-in via classe) */
+@media (max-width: 767px) {
+  .btn-touch {
+    min-height: 44px;
+  }
+}
+
+/* Respeita safe-area do iPhone (notch/home indicator) */
+@supports (padding: env(safe-area-inset-bottom)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}

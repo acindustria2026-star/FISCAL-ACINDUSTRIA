@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm -v)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(npx tsx *)",
+      "Bash(node --experimental-strip-types \"c:/Users/heryc/OneDrive/Área de Trabalho/FISCAL/src/_calc-test.ts\")",
+      "Bash(npm audit *)",
+      "Bash(git branch *)",
+      "Bash(git config *)",
+      "Bash(git add *)"
+    ]
+  }
+}
