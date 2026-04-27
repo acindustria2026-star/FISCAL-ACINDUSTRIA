@@ -51,57 +51,99 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const ultimoAcessoEnviado = useRef<string | null>(null);
 
   const carregarPerfil = useCallback(async (userId: string) => {
-    const { data, error } = await supabase
-      .from('perfis')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+    console.log('🔵 [Auth] carregando perfil...', userId);
+    try {
+      const { data, error } = await supabase
+        .from('perfis')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
 
-    if (error) {
-      console.error('Erro ao carregar perfil:', error);
+      if (error) {
+        console.error('🔴 [Auth] ERRO ao carregar perfil:', error);
+        setPerfil(null);
+        return null;
+      }
+
+      console.log('🟢 [Auth] perfil carregado:', data);
+      setPerfil(data ?? null);
+
+      if (data && ultimoAcessoEnviado.current !== userId) {
+        ultimoAcessoEnviado.current = userId;
+        void supabase
+          .from('perfis')
+          .update({ ultimo_acesso: new Date().toISOString() })
+          .eq('id', userId);
+      }
+
+      return data ?? null;
+    } catch (err) {
+      console.error('🔴 [Auth] ERRO inesperado em carregarPerfil:', err);
       setPerfil(null);
       return null;
     }
-
-    setPerfil(data ?? null);
-
-    if (data && ultimoAcessoEnviado.current !== userId) {
-      ultimoAcessoEnviado.current = userId;
-      void supabase
-        .from('perfis')
-        .update({ ultimo_acesso: new Date().toISOString() })
-        .eq('id', userId);
-    }
-
-    return data ?? null;
   }, []);
 
   useEffect(() => {
+    console.log('🔵 [Auth] useEffect inicial iniciado');
     let cancelado = false;
 
-    void supabase.rpc('precisa_setup').then(({ data, error }) => {
-      if (cancelado) return;
-      if (!error && typeof data === 'boolean') setSetupNeeded(data);
+    // Timeout de emergência: força carregando=false após 8s
+    // pra evitar tela presa em "Carregando..." se algo der pau silenciosamente
+    const timeoutEmergencia = setTimeout(() => {
+      console.warn('⏱️ [Auth] TIMEOUT 8s: forçando carregando=false');
+      setCarregando(false);
+    }, 8000);
+
+    // Timeout específico de 3s na RPC precisa_setup — se demorar,
+    // assume false e segue (não bloqueia a tela)
+    console.log('🔵 [Auth] verificando setup...');
+    const setupCheckPromise = supabase.rpc('precisa_setup');
+    const setupTimeoutPromise = new Promise<{ data: boolean; error: null }>((resolve) => {
+      setTimeout(() => {
+        console.warn('⏱️ [Auth] TIMEOUT 3s na RPC precisa_setup — assumindo false');
+        resolve({ data: false, error: null });
+      }, 3000);
     });
+
+    void Promise.race([setupCheckPromise, setupTimeoutPromise])
+      .then((res) => {
+        if (cancelado) return;
+        const { data, error } = res as { data: unknown; error: unknown };
+        console.log('🟢 [Auth] setup result:', { data, error });
+        if (!error && typeof data === 'boolean') setSetupNeeded(data);
+      })
+      .catch((err) => {
+        console.error('🔴 [Auth] ERRO em precisa_setup:', err);
+      });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, sess) => {
+    } = supabase.auth.onAuthStateChange(async (event, sess) => {
+      console.log('🔵 [Auth] onAuthStateChange evento:', event, 'session?', !!sess);
       if (cancelado) return;
-      setSession(sess);
-      setUser(sess?.user ?? null);
+      try {
+        setSession(sess);
+        setUser(sess?.user ?? null);
 
-      if (sess?.user) {
-        await carregarPerfil(sess.user.id);
-      } else {
-        setPerfil(null);
-        ultimoAcessoEnviado.current = null;
+        if (sess?.user) {
+          await carregarPerfil(sess.user.id);
+        } else {
+          setPerfil(null);
+          ultimoAcessoEnviado.current = null;
+        }
+      } catch (err) {
+        console.error('🔴 [Auth] ERRO em onAuthStateChange:', err);
+      } finally {
+        console.log('✅ [Auth] setCarregando(false)');
+        setCarregando(false);
       }
-      setCarregando(false);
     });
 
     return () => {
+      console.log('🔵 [Auth] cleanup do useEffect inicial');
       cancelado = true;
+      clearTimeout(timeoutEmergencia);
       subscription.unsubscribe();
     };
   }, [carregarPerfil]);
