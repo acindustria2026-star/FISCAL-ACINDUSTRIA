@@ -41,10 +41,14 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// Helper: adiciona timeout em qualquer Promise
-function comTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+// Helper genérico de timeout — aceita qualquer thenable
+async function comTimeout<T>(
+  thenable: PromiseLike<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
   return Promise.race([
-    promise,
+    Promise.resolve(thenable),
     new Promise<T>((_, reject) =>
       setTimeout(() => reject(new Error(`Timeout ${ms}ms: ${label}`)), ms),
     ),
@@ -63,15 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const carregarPerfil = useCallback(async (userId: string) => {
     console.log('🔵 [Auth] carregando perfil...', userId);
     try {
-      // Query com timeout de 5s
-      const queryPromise = supabase
-        .from('perfis')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
       const { data, error } = await comTimeout(
-        queryPromise,
+        supabase.from('perfis').select('*').eq('id', userId).maybeSingle(),
         5000,
         'select perfis',
       );
@@ -87,11 +84,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (data && ultimoAcessoEnviado.current !== userId) {
         ultimoAcessoEnviado.current = userId;
-        // fire-and-forget — não trava se demorar
-        void supabase
+        // fire-and-forget
+        supabase
           .from('perfis')
           .update({ ultimo_acesso: new Date().toISOString() })
-          .eq('id', userId);
+          .eq('id', userId)
+          .then(
+            () => {},
+            (err) => console.warn('⚠️ Falha update ultimo_acesso:', err),
+          );
       }
 
       return data ?? null;
@@ -111,27 +112,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!cancelado) setCarregando(false);
     }, 10000);
 
-    // Setup check com timeout (não bloqueia)
+    // Setup check com timeout
     console.log('🔵 [Auth] verificando setup...');
-    void comTimeout(supabase.rpc('precisa_setup'), 3000, 'rpc precisa_setup')
+    comTimeout(supabase.rpc('precisa_setup'), 3000, 'rpc precisa_setup')
       .then((res) => {
         if (cancelado) return;
         const { data, error } = res as { data: unknown; error: unknown };
         console.log('🟢 [Auth] setup result:', { data, error });
         if (!error && typeof data === 'boolean') setSetupNeeded(data);
       })
-      .catch((err) => {
-        console.warn('⏱️ [Auth] precisa_setup falhou/timeout — assumindo false:', err.message);
+      .catch((err: Error) => {
+        console.warn(
+          '⏱️ [Auth] precisa_setup falhou/timeout — assumindo false:',
+          err.message,
+        );
       });
 
-    // Pega sessão atual ANTES de registrar listener
+    // Sessão inicial + perfil
     void (async () => {
       try {
-        const { data: { session: sess } } = await comTimeout(
+        const sessRes = await comTimeout(
           supabase.auth.getSession(),
           3000,
           'getSession',
         );
+        const sess = sessRes.data.session;
         console.log('🔵 [Auth] sessão inicial:', !!sess);
         if (cancelado) return;
 
@@ -151,14 +156,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })();
 
-    // Listener pra mudanças (login/logout posteriores)
+    // Listener pra mudanças posteriores (login/logout)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, sess) => {
       console.log('🔵 [Auth] onAuthStateChange evento:', event, 'session?', !!sess);
       if (cancelado) return;
-      // Só reage a SIGNED_IN/SIGNED_OUT depois do load inicial,
-      // pra não duplicar carregamento
       if (event === 'INITIAL_SESSION') return;
 
       try {
@@ -193,14 +196,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       if (error) throw new Error(traduzirErro(error.message));
 
-      // Auditoria fire-and-forget — não bloqueia
+      // Auditoria fire-and-forget
       if (data.user) {
-        void (async () => {
+        const userId = data.user.id;
+        (async () => {
           try {
             const { data: p } = await supabase
               .from('perfis')
               .select('id, nome, empresa_id')
-              .eq('id', data.user!.id)
+              .eq('id', userId)
               .maybeSingle();
             if (p) {
               await supabase.from('auditoria').insert({
@@ -226,13 +230,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     if (perfil) {
       // fire-and-forget
-      void supabase.from('auditoria').insert({
-        empresa_id: perfil.empresa_id,
-        usuario_id: perfil.id,
-        usuario_nome: perfil.nome,
-        acao: 'LOGOUT',
-        recurso: 'sistema',
-      });
+      supabase
+        .from('auditoria')
+        .insert({
+          empresa_id: perfil.empresa_id,
+          usuario_id: perfil.id,
+          usuario_nome: perfil.nome,
+          acao: 'LOGOUT',
+          recurso: 'sistema',
+        })
+        .then(
+          () => {},
+          (err) => console.warn('⚠️ Auditoria de logout falhou:', err),
+        );
     }
     await supabase.auth.signOut();
     setPerfil(null);
@@ -255,11 +265,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (signUpError) {
         const msgLower = signUpError.message.toLowerCase();
-        if (msgLower.includes('already registered') || msgLower.includes('already exists')) {
-          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-            email,
-            password: senha,
-          });
+        if (
+          msgLower.includes('already registered') ||
+          msgLower.includes('already exists')
+        ) {
+          const { data: signInData, error: signInError } =
+            await supabase.auth.signInWithPassword({ email, password: senha });
           if (signInError) throw new Error(traduzirErro(signInError.message));
           userId = signInData.user?.id ?? null;
         } else {
