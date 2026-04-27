@@ -1,12 +1,44 @@
 import { z } from 'zod';
 
-const numero = z
-  .string()
-  .transform((v) => Number(v.replace(',', '.')))
-  .refine((n) => Number.isFinite(n), 'Valor inválido');
+/**
+ * Aceita string (do input HTML) OU number (caso valueAsNumber).
+ * Suporta vírgula como separador decimal (pt-BR).
+ */
+function preprocessNumero(unknownInput: unknown): number {
+  if (typeof unknownInput === 'number') return unknownInput;
+  if (typeof unknownInput === 'string') {
+    const t = unknownInput.trim();
+    if (t === '') return NaN;
+    return Number(t.replace(',', '.'));
+  }
+  return Number(unknownInput);
+}
 
-const numeroNaoNegativo = numero.refine((n) => n >= 0, 'Não pode ser negativo');
-const numeroPositivo = numero.refine((n) => n > 0, 'Deve ser maior que zero');
+function preprocessNumeroOpcional(unknownInput: unknown): number | null {
+  if (unknownInput === null || unknownInput === undefined) return null;
+  if (typeof unknownInput === 'string') {
+    const t = unknownInput.trim();
+    if (t === '') return null;
+    return Number(t.replace(',', '.'));
+  }
+  if (typeof unknownInput === 'number') return unknownInput;
+  return Number(unknownInput);
+}
+
+const numeroPositivo = z.preprocess(
+  preprocessNumero,
+  z.number().positive('Deve ser maior que zero'),
+);
+
+const numeroNaoNegativo = z.preprocess(
+  preprocessNumero,
+  z.number().min(0, 'Não pode ser negativo'),
+);
+
+const numeroOpcionalNaoNegativo = z.preprocess(
+  preprocessNumeroOpcional,
+  z.number().min(0, 'Valor inválido').nullable(),
+);
 
 export const recebimentoFormSchema = z
   .object({
@@ -16,12 +48,7 @@ export const recebimentoFormSchema = z
     impureza_kg: numeroNaoNegativo,
     pago: z.boolean(),
     data_pagamento: z.string().nullable().optional(),
-    valor_real_recebido: z
-      .string()
-      .transform((v) => (v.trim() === '' ? null : Number(v.replace(',', '.'))))
-      .refine((n) => n === null || (Number.isFinite(n) && n >= 0), 'Valor inválido')
-      .nullable()
-      .optional(),
+    valor_real_recebido: numeroOpcionalNaoNegativo.optional(),
     observacoes: z.string().nullable().optional(),
   })
   .refine((d) => d.impureza_kg <= d.peso_bruto, {
@@ -29,5 +56,20 @@ export const recebimentoFormSchema = z
     path: ['impureza_kg'],
   });
 
-export type RecebimentoFormData = z.input<typeof recebimentoFormSchema>;
+/**
+ * Tipo manual do form. Numéricos são `string | number` —
+ * inputs HTML mantêm string, mas valueAsNumber daria number.
+ * Ambos passam pelo preprocess no submit.
+ */
+export type RecebimentoFormData = {
+  nf_id: string;
+  data_recebimento: string;
+  peso_bruto: string | number;
+  impureza_kg: string | number;
+  pago: boolean;
+  data_pagamento?: string | null;
+  valor_real_recebido?: string | number | null;
+  observacoes?: string | null;
+};
+
 export type RecebimentoFormParsed = z.output<typeof recebimentoFormSchema>;

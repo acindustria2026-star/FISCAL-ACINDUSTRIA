@@ -1,18 +1,39 @@
 import { z } from 'zod';
 
-const numeroPositivo = z
-  .string()
-  .transform((v) => Number(v.replace(',', '.')))
-  .refine((n) => Number.isFinite(n) && n > 0, 'Valor deve ser maior que zero');
+/**
+ * Aceita string (do input HTML) OU number (caso valueAsNumber).
+ * Suporta vírgula como separador decimal (pt-BR).
+ */
+function preprocessNumero(unknownInput: unknown): number {
+  if (typeof unknownInput === 'number') return unknownInput;
+  if (typeof unknownInput === 'string') {
+    const t = unknownInput.trim();
+    if (t === '') return NaN;
+    return Number(t.replace(',', '.'));
+  }
+  return Number(unknownInput);
+}
 
-const numeroOpcionalPositivo = z
-  .string()
-  .transform((v) => (v.trim() === '' ? null : Number(v.replace(',', '.'))))
-  .refine(
-    (n) => n === null || (Number.isFinite(n) && n > 0),
-    'Valor deve ser maior que zero',
-  )
-  .nullable();
+function preprocessNumeroOpcional(unknownInput: unknown): number | null {
+  if (unknownInput === null || unknownInput === undefined) return null;
+  if (typeof unknownInput === 'string') {
+    const t = unknownInput.trim();
+    if (t === '') return null;
+    return Number(t.replace(',', '.'));
+  }
+  if (typeof unknownInput === 'number') return unknownInput;
+  return Number(unknownInput);
+}
+
+const numeroPositivo = z.preprocess(
+  preprocessNumero,
+  z.number().positive('Valor deve ser maior que zero'),
+);
+
+const numeroOpcionalPositivo = z.preprocess(
+  preprocessNumeroOpcional,
+  z.number().positive('Valor deve ser maior que zero').nullable(),
+);
 
 export const pedidoFormSchema = z
   .object({
@@ -35,5 +56,21 @@ export const pedidoFormSchema = z
     path: ['prazo'],
   });
 
-export type PedidoFormData = z.input<typeof pedidoFormSchema>;
+/**
+ * Tipo manual do form. Numéricos são `string | number` —
+ * inputs HTML mantêm string, mas valueAsNumber daria number.
+ * Ambos passam pelo preprocess no submit.
+ */
+export type PedidoFormData = {
+  numero?: string;
+  cliente_id: string | null;
+  cliente_nome: string;
+  material?: string | null;
+  peso_total: string | number;
+  preco_referencia: string | number | null;
+  data_inicio: string;
+  prazo?: string | null;
+  observacoes?: string | null;
+};
+
 export type PedidoFormParsed = z.output<typeof pedidoFormSchema>;
