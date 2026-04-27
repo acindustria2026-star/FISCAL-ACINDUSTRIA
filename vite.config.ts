@@ -26,33 +26,28 @@ export default defineConfig({
         ],
       },
       workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
         navigateFallback: '/index.html',
-        globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        navigateFallbackDenylist: [/^\/api/, /\.[a-f0-9]{8,}\.(js|css)$/],
         runtimeCaching: [
           {
-            // Supabase (DB queries, auth) — sempre tenta rede primeiro
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'supabase-cache',
-              networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 },
-            },
+            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
+            handler: 'NetworkOnly',
           },
           {
-            // Fontes Google — cache de longo prazo
-            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/,
-            handler: 'CacheFirst',
+            urlPattern: /\/assets\/.*\.(js|css)$/i,
+            handler: 'NetworkFirst',
             options: {
-              cacheName: 'google-fonts',
-              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
+              cacheName: 'assets-cache',
+              expiration: { maxEntries: 50, maxAgeSeconds: 3600 },
             },
           },
         ],
       },
       devOptions: {
-        // Habilita PWA em dev pra testes (mas o ideal é testar via build)
         enabled: false,
       },
     }),
