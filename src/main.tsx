@@ -8,6 +8,25 @@ import { PeriodoProvider } from './contexts/PeriodoContext';
 import { ToastProvider } from './components/ui/Toast';
 import './index.css';
 
+// Desregistra qualquer Service Worker antigo + limpa caches
+// (resolve cache infinito do PWA antigo). Roda no início, antes da app montar.
+if (typeof window !== 'undefined') {
+  if ('serviceWorker' in navigator) {
+    void navigator.serviceWorker.getRegistrations().then((regs) => {
+      regs.forEach((reg) => {
+        void reg.unregister();
+      });
+    });
+  }
+  if ('caches' in window) {
+    void caches.keys().then((names) => {
+      names.forEach((name) => {
+        void caches.delete(name);
+      });
+    });
+  }
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

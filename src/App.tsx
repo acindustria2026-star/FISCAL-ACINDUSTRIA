@@ -3,8 +3,6 @@ import { useAuth } from './contexts/AuthContext';
 import { PrivateRoute } from './components/PrivateRoute';
 import { Loading } from './components/ui/Loading';
 import { Layout } from './components/layout/Layout';
-import { InstallPWA } from './components/InstallPWA';
-import { UpdatePrompt } from './components/UpdatePrompt';
 import Setup from './pages/Setup';
 import Login from './pages/Login';
 import EsqueciSenha from './pages/EsqueciSenha';
@@ -28,8 +26,7 @@ export default function App() {
   if (carregando) return <Loading />;
 
   return (
-    <>
-      <Routes>
+    <Routes>
       <Route
         path="/setup"
         element={setupNeeded ? <Setup /> : <Navigate to="/" replace />}
@@ -72,9 +69,6 @@ export default function App() {
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-      <InstallPWA />
-      <UpdatePrompt />
-    </>
+    </Routes>
   );
 }

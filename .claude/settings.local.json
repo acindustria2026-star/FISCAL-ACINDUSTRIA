@@ -14,7 +14,8 @@
       "Bash(git commit *)",
       "Bash(git remote *)",
       "Bash(git push *)",
-      "Bash(grep -nB1 -A1 'type=\"number\"' \"c:/Users/heryc/OneDrive/Área de Trabalho/FISCAL/src/components/nfs/ModalNF.tsx\")"
+      "Bash(grep -nB1 -A1 'type=\"number\"' \"c:/Users/heryc/OneDrive/Área de Trabalho/FISCAL/src/components/nfs/ModalNF.tsx\")",
+      "Bash(npm uninstall *)"
     ]
   }
 }
