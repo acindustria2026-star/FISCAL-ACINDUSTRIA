@@ -41,6 +41,16 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+// Helper: adiciona timeout em qualquer Promise
+function comTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout ${ms}ms: ${label}`)), ms),
+    ),
+  ]);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [perfil, setPerfil] = useState<PerfilRow | null>(null);
@@ -53,11 +63,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const carregarPerfil = useCallback(async (userId: string) => {
     console.log('🔵 [Auth] carregando perfil...', userId);
     try {
-      const { data, error } = await supabase
+      // Query com timeout de 5s
+      const queryPromise = supabase
         .from('perfis')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
+
+      const { data, error } = await comTimeout(
+        queryPromise,
+        5000,
+        'select perfis',
+      );
 
       if (error) {
         console.error('🔴 [Auth] ERRO ao carregar perfil:', error);
@@ -70,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (data && ultimoAcessoEnviado.current !== userId) {
         ultimoAcessoEnviado.current = userId;
+        // fire-and-forget — não trava se demorar
         void supabase
           .from('perfis')
           .update({ ultimo_acesso: new Date().toISOString() })
@@ -88,25 +106,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('🔵 [Auth] useEffect inicial iniciado');
     let cancelado = false;
 
-    // Timeout de emergência: força carregando=false após 8s
-    // pra evitar tela presa em "Carregando..." se algo der pau silenciosamente
     const timeoutEmergencia = setTimeout(() => {
-      console.warn('⏱️ [Auth] TIMEOUT 8s: forçando carregando=false');
-      setCarregando(false);
-    }, 8000);
+      console.warn('⏱️ [Auth] TIMEOUT 10s: forçando carregando=false');
+      if (!cancelado) setCarregando(false);
+    }, 10000);
 
-    // Timeout específico de 3s na RPC precisa_setup — se demorar,
-    // assume false e segue (não bloqueia a tela)
+    // Setup check com timeout (não bloqueia)
     console.log('🔵 [Auth] verificando setup...');
-    const setupCheckPromise = supabase.rpc('precisa_setup');
-    const setupTimeoutPromise = new Promise<{ data: boolean; error: null }>((resolve) => {
-      setTimeout(() => {
-        console.warn('⏱️ [Auth] TIMEOUT 3s na RPC precisa_setup — assumindo false');
-        resolve({ data: false, error: null });
-      }, 3000);
-    });
-
-    void Promise.race([setupCheckPromise, setupTimeoutPromise])
+    void comTimeout(supabase.rpc('precisa_setup'), 3000, 'rpc precisa_setup')
       .then((res) => {
         if (cancelado) return;
         const { data, error } = res as { data: unknown; error: unknown };
@@ -114,14 +121,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!error && typeof data === 'boolean') setSetupNeeded(data);
       })
       .catch((err) => {
-        console.error('🔴 [Auth] ERRO em precisa_setup:', err);
+        console.warn('⏱️ [Auth] precisa_setup falhou/timeout — assumindo false:', err.message);
       });
 
+    // Pega sessão atual ANTES de registrar listener
+    void (async () => {
+      try {
+        const { data: { session: sess } } = await comTimeout(
+          supabase.auth.getSession(),
+          3000,
+          'getSession',
+        );
+        console.log('🔵 [Auth] sessão inicial:', !!sess);
+        if (cancelado) return;
+
+        setSession(sess);
+        setUser(sess?.user ?? null);
+
+        if (sess?.user) {
+          await carregarPerfil(sess.user.id);
+        }
+      } catch (err) {
+        console.error('🔴 [Auth] ERRO ao carregar sessão inicial:', err);
+      } finally {
+        if (!cancelado) {
+          console.log('✅ [Auth] setCarregando(false) — sessão inicial');
+          setCarregando(false);
+        }
+      }
+    })();
+
+    // Listener pra mudanças (login/logout posteriores)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, sess) => {
       console.log('🔵 [Auth] onAuthStateChange evento:', event, 'session?', !!sess);
       if (cancelado) return;
+      // Só reage a SIGNED_IN/SIGNED_OUT depois do load inicial,
+      // pra não duplicar carregamento
+      if (event === 'INITIAL_SESSION') return;
+
       try {
         setSession(sess);
         setUser(sess?.user ?? null);
@@ -134,9 +173,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (err) {
         console.error('🔴 [Auth] ERRO em onAuthStateChange:', err);
-      } finally {
-        console.log('✅ [Auth] setCarregando(false)');
-        setCarregando(false);
       }
     });
 
@@ -157,22 +193,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       if (error) throw new Error(traduzirErro(error.message));
 
+      // Auditoria fire-and-forget — não bloqueia
       if (data.user) {
-        const { data: p } = await supabase
-          .from('perfis')
-          .select('id, nome, empresa_id')
-          .eq('id', data.user.id)
-          .maybeSingle();
-        if (p) {
-          void supabase.from('auditoria').insert({
-            empresa_id: p.empresa_id,
-            usuario_id: p.id,
-            usuario_nome: p.nome,
-            acao: 'LOGIN',
-            recurso: 'sistema',
-            detalhes: { user_agent: navigator.userAgent },
-          });
-        }
+        void (async () => {
+          try {
+            const { data: p } = await supabase
+              .from('perfis')
+              .select('id, nome, empresa_id')
+              .eq('id', data.user!.id)
+              .maybeSingle();
+            if (p) {
+              await supabase.from('auditoria').insert({
+                empresa_id: p.empresa_id,
+                usuario_id: p.id,
+                usuario_nome: p.nome,
+                acao: 'LOGIN',
+                recurso: 'sistema',
+                detalhes: { user_agent: navigator.userAgent },
+              });
+            }
+          } catch (err) {
+            console.warn('⚠️ Auditoria de login falhou:', err);
+          }
+        })();
       }
 
       navigate('/dashboard');
@@ -182,7 +225,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     if (perfil) {
-      await supabase.from('auditoria').insert({
+      // fire-and-forget
+      void supabase.from('auditoria').insert({
         empresa_id: perfil.empresa_id,
         usuario_id: perfil.id,
         usuario_nome: perfil.nome,
