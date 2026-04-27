@@ -421,9 +421,9 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
             if (qual === 'ICMS') form.setValue('icms_ativo', on);
             else form.setValue('piscofins_ativo', on);
           }}
-          icmsPP={valores.icms_pct_pp}
-          pisPP={valores.pis_pct_pp}
-          cofinsPP={valores.cofins_pct_pp}
+          icmsPP={String(valores.icms_pct_pp ?? '')}
+          pisPP={String(valores.pis_pct_pp ?? '')}
+          cofinsPP={String(valores.cofins_pct_pp ?? '')}
           onChangePP={(qual, v) => {
             const key = qual === 'ICMS' ? 'icms_pct_pp' : qual === 'PIS' ? 'pis_pct_pp' : 'cofins_pct_pp';
             form.setValue(key, v, { shouldValidate: true });
