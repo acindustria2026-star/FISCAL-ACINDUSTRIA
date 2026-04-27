@@ -108,9 +108,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelado = false;
 
     const timeoutEmergencia = setTimeout(() => {
-      console.warn('⏱️ [Auth] TIMEOUT 10s: forçando carregando=false');
+      console.warn('⏱️ [Auth] TIMEOUT 25s: forçando carregando=false');
       if (!cancelado) setCarregando(false);
-    }, 10000);
+    }, 25000);
 
     // Setup check com timeout
     console.log('🔵 [Auth] verificando setup...');
@@ -128,31 +128,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
       });
 
-    // Sessão inicial + perfil
+    // Sessão inicial — com retry (3 tentativas) e timeout maior por tentativa
     void (async () => {
-      try {
-        const sessRes = await comTimeout(
-          supabase.auth.getSession(),
-          3000,
-          'getSession',
-        );
-        const sess = sessRes.data.session;
-        console.log('🔵 [Auth] sessão inicial:', !!sess);
-        if (cancelado) return;
+      let sess: Session | null = null;
+      let tentativas = 0;
+      const MAX_TENTATIVAS = 3;
 
-        setSession(sess);
-        setUser(sess?.user ?? null);
+      while (tentativas < MAX_TENTATIVAS && !cancelado) {
+        tentativas++;
+        try {
+          console.log(`🔵 [Auth] getSession tentativa ${tentativas}/${MAX_TENTATIVAS}`);
+          const sessRes = await comTimeout(
+            supabase.auth.getSession(),
+            8000,
+            `getSession #${tentativas}`,
+          );
+          sess = sessRes.data.session;
+          console.log('🔵 [Auth] sessão inicial OK:', !!sess);
+          break;
+        } catch (err) {
+          console.warn(
+            `⏱️ [Auth] tentativa ${tentativas} falhou:`,
+            (err as Error).message,
+          );
+          if (tentativas < MAX_TENTATIVAS) {
+            await new Promise((r) => setTimeout(r, 500));
+          }
+        }
+      }
 
-        if (sess?.user) {
-          await carregarPerfil(sess.user.id);
-        }
-      } catch (err) {
-        console.error('🔴 [Auth] ERRO ao carregar sessão inicial:', err);
-      } finally {
-        if (!cancelado) {
-          console.log('✅ [Auth] setCarregando(false) — sessão inicial');
-          setCarregando(false);
-        }
+      if (cancelado) return;
+
+      setSession(sess);
+      setUser(sess?.user ?? null);
+
+      if (sess?.user) {
+        await carregarPerfil(sess.user.id);
+      }
+
+      if (!cancelado) {
+        console.log('✅ [Auth] setCarregando(false) — sessão inicial');
+        setCarregando(false);
       }
     })();
 
