@@ -11,6 +11,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { usuarioParaEmail } from '../lib/userMapper';
+import { verificarAcesso } from '../lib/seguranca';
 import type { PerfilRow } from '../types/database';
 
 export interface SetupData {
@@ -195,13 +196,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
+    // Logout automático após 4h sem interação
+    let timerInatividade: ReturnType<typeof setTimeout>;
+    const TEMPO_INATIVIDADE = 4 * 60 * 60 * 1000;
+
+    const resetTimerInatividade = () => {
+      clearTimeout(timerInatividade);
+      timerInatividade = setTimeout(() => {
+        console.warn('⏱️ [Auth] Logout por inatividade (4h)');
+        void supabase.auth.signOut().then(() => {
+          setPerfil(null);
+          navigate('/login');
+        });
+      }, TEMPO_INATIVIDADE);
+    };
+
+    const eventos = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+    eventos.forEach((ev) => window.addEventListener(ev, resetTimerInatividade));
+    resetTimerInatividade();
+
     return () => {
       console.log('🔵 [Auth] cleanup do useEffect inicial');
       cancelado = true;
       clearTimeout(timeoutEmergencia);
+      clearTimeout(timerInatividade);
+      eventos.forEach((ev) => window.removeEventListener(ev, resetTimerInatividade));
       subscription.unsubscribe();
     };
-  }, [carregarPerfil]);
+  }, [carregarPerfil, navigate]);
+
+  // Verificação periódica (a cada 5min): revoga acesso se sair do horário/local
+  useEffect(() => {
+    if (!perfil) return;
+
+    const interval = setInterval(() => {
+      void (async () => {
+        const verificacao = await verificarAcesso(perfil.papel);
+        if (!verificacao.permitido) {
+          console.warn('🚫 [Auth] Acesso revogado durante a sessão:', verificacao.motivo);
+          await supabase.auth.signOut();
+          setPerfil(null);
+          navigate('/login');
+        }
+      })();
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [perfil, navigate]);
 
   const login = useCallback(
     async (usuario: string, senha: string) => {
@@ -236,6 +277,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.warn('⚠️ Auditoria de login falhou:', err);
           }
         })();
+      }
+
+      // Verifica segurança baseada no papel
+      if (data.user) {
+        const { data: perfilData } = await supabase
+          .from('perfis')
+          .select('papel')
+          .eq('id', data.user.id)
+          .maybeSingle();
+
+        const papel = perfilData?.papel ?? 'OPERADOR';
+        const verificacao = await verificarAcesso(papel);
+
+        if (!verificacao.permitido) {
+          console.warn('🚫 [Auth] Acesso bloqueado:', verificacao.motivo);
+          await supabase.auth.signOut();
+          throw new Error('Acesso negado');
+        }
       }
 
       navigate('/dashboard');
