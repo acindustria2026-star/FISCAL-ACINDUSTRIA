@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data, error } = await comTimeout(
         supabase.from('perfis').select('*').eq('id', userId).maybeSingle(),
-        5000,
+        15000,
         'select perfis',
       );
 
@@ -99,7 +99,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return data ?? null;
     } catch (err) {
       console.error('🔴 [Auth] ERRO inesperado em carregarPerfil:', err);
-      setPerfil(null);
+      // NÃO seta perfil como null em timeout — mantém perfil anterior
+      // Só limpa se for erro de autenticação real
+      const msg = (err as Error)?.message ?? '';
+      if (msg.includes('JWT') || msg.includes('auth')) {
+        setPerfil(null);
+      }
       return null;
     }
   }, []);
@@ -232,7 +237,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       eventos.forEach((ev) => window.removeEventListener(ev, resetTimerInatividade));
       subscription.unsubscribe();
     };
-  }, [carregarPerfil, navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Roda só na montagem inicial
 
   // Verificação periódica (a cada 5min): revoga acesso se sair do horário/local
   useEffect(() => {
