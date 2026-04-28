@@ -178,6 +178,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, sess) => {
       console.log('🔵 [Auth] onAuthStateChange evento:', event, 'session?', !!sess);
+
+      if (event === 'TOKEN_REFRESHED') {
+        console.log('🔄 [Auth] Token renovado com sucesso');
+      }
+
+      if (event === 'SIGNED_OUT') {
+        console.log('🚪 [Auth] SIGNED_OUT detectado');
+      }
+
       if (cancelado) return;
       if (event === 'INITIAL_SESSION') return;
 
