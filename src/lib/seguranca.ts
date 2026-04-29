@@ -1,8 +1,3 @@
-// Localização da empresa
-const EMPRESA_LAT = -16.16548685972958;
-const EMPRESA_LNG = -47.925580557671054;
-const RAIO_METROS = 2000; // 2 km
-
 // Faixa de IP do provedor da empresa (FlyNet Telecom)
 const FAIXA_IP_PERMITIDA = '177.86.';
 
@@ -12,7 +7,7 @@ const HORARIO_FIM = 18;
 
 export interface VerificacaoSeguranca {
   permitido: boolean;
-  motivo?: 'horario' | 'ip' | 'localizacao' | 'permissao_negada' | 'erro';
+  motivo?: 'horario' | 'ip' | 'erro';
 }
 
 // Verifica horário comercial
@@ -25,22 +20,6 @@ export function dentroHorarioComercial(): boolean {
   if (hora < HORARIO_INICIO || hora >= HORARIO_FIM) return false;
 
   return true;
-}
-
-// Calcula distância entre 2 coordenadas (Haversine)
-function distanciaMetros(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371000;
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
 }
 
 // Busca IP público do cliente
@@ -86,59 +65,17 @@ export async function ipDaEmpresa(): Promise<{ ok: boolean; ip?: string }> {
   const ip = await obterIpPublico();
 
   if (!ip) {
-    console.warn('📡 [Seguranca] não conseguiu obter IP público');
-    return { ok: false };
+    console.warn('📡 [Seguranca] não conseguiu obter IP público — assumindo OK por tolerancia');
+    return { ok: true }; // tolera erro de internet pra não deslogar usuário legítimo
   }
 
   console.log(`📡 [Seguranca] IP do cliente: ${ip}`);
   const permitido = ip.startsWith(FAIXA_IP_PERMITIDA);
-  console.log(`📡 [Seguranca] IP ${permitido ? '✅ FlyNet' : '❌ outro provedor'}`);
+  console.log(
+    `📡 [Seguranca] IP ${permitido ? '✅ FlyNet (permitido)' : '❌ outro provedor (bloqueado)'}`,
+  );
 
   return { ok: permitido, ip };
-}
-
-// Verifica localização GPS
-export function dentroEmpresa(): Promise<{
-  ok: boolean;
-  motivo?: VerificacaoSeguranca['motivo'];
-  distancia?: number;
-}> {
-  return new Promise((resolve) => {
-    if (!navigator.geolocation) {
-      console.warn('📍 [Seguranca] geolocalização não disponível');
-      resolve({ ok: false, motivo: 'erro' });
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const dist = distanciaMetros(
-          pos.coords.latitude,
-          pos.coords.longitude,
-          EMPRESA_LAT,
-          EMPRESA_LNG,
-        );
-        const distRound = Math.round(dist);
-        console.log(
-          `📍 [Seguranca] distância da empresa: ${distRound}m (raio ${RAIO_METROS}m)`,
-        );
-        const ok = dist <= RAIO_METROS;
-        console.log(
-          `📍 [Seguranca] localização ${ok ? '✅ dentro da empresa' : '❌ fora da empresa'}`,
-        );
-        resolve({ ok, motivo: ok ? undefined : 'localizacao', distancia: distRound });
-      },
-      (err) => {
-        console.warn('📍 [Seguranca] erro geolocalização:', err.code, err.message);
-        if (err.code === err.PERMISSION_DENIED) {
-          resolve({ ok: false, motivo: 'permissao_negada' });
-        } else {
-          resolve({ ok: false, motivo: 'erro' });
-        }
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
-    );
-  });
 }
 
 // Verifica TUDO de acordo com o papel
@@ -165,14 +102,6 @@ export async function verificarAcesso(papel: string): Promise<VerificacaoSeguran
     return { permitido: false, motivo: 'ip' };
   }
   console.log('✅ [Seguranca] IP OK (FlyNet)');
-
-  // 3. LOCALIZAÇÃO GPS
-  const verifGps = await dentroEmpresa();
-  if (!verifGps.ok) {
-    console.warn(`🚫 [Seguranca] BLOQUEADO: ${verifGps.motivo}`);
-    return { permitido: false, motivo: verifGps.motivo };
-  }
-  console.log('✅ [Seguranca] localização OK');
 
   console.log('🎉 [Seguranca] TODAS as verificações passaram — acesso liberado');
   return { permitido: true };
