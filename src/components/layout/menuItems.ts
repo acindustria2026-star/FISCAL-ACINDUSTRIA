@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Package,
   PackageCheck,
+  Receipt,
   ShieldCheck,
   Users,
   Wallet,
@@ -66,6 +67,13 @@ export const MENU: MenuEntry[] = [
     path: '/financeiro',
     label: 'Financeiro',
     icone: Wallet,
+    papeis: ['ADMIN', 'FINANCEIRO'],
+  },
+  {
+    type: 'item',
+    path: '/impostos',
+    label: 'Impostos',
+    icone: Receipt,
     papeis: ['ADMIN', 'FINANCEIRO'],
   },
   {

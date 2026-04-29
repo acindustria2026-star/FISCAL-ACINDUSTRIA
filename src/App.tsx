@@ -20,6 +20,7 @@ import Auditoria from './pages/Auditoria';
 import Equipe from './pages/Equipe';
 import AceitarConvite from './pages/AceitarConvite';
 import Backup from './pages/Backup';
+import Impostos from './pages/Impostos';
 
 export default function App() {
   const { perfil, carregando, setupNeeded } = useAuth();
@@ -63,6 +64,7 @@ export default function App() {
         <Route path="/recebimentos" element={<Recebimentos />} />
         <Route path="/comparativo" element={<Comparativo />} />
         <Route path="/financeiro" element={<Financeiro />} />
+        <Route path="/impostos" element={<Impostos />} />
         <Route path="/relatorios" element={<Relatorios />} />
         <Route path="/auditoria" element={<Auditoria />} />
         <Route path="/equipe" element={<Equipe />} />
