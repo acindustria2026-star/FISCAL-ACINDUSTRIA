@@ -37,6 +37,13 @@ import { useOrdenacao } from '../hooks/useOrdenacao';
 import { usePeriodo } from '../contexts/PeriodoContext';
 import { brl, brl4, formatarData, kg as fmtKg } from '../lib/formatters';
 import { imprimirRelatorio, type MetricaParaPrint } from '../utils/imprimirRelatorio';
+import {
+  imprimirRelatorio as imprimirPrecoReal,
+  baixarPDFRelatorio,
+  exportarExcelRelatorio,
+  type DadosRelatorio,
+} from '../lib/relatorioPrecoReal';
+import type { EmpresaRow } from '../types/database';
 
 type Aba = 'impureza' | 'diferenca' | 'valor' | 'aberto' | 'precoReal';
 
@@ -144,7 +151,9 @@ export default function Relatorios() {
           periodoLabel={formatarPeriodo()}
         />
       )}
-      {aba === 'precoReal' && <ViewPrecoReal />}
+      {aba === 'precoReal' && (
+        <ViewPrecoReal empresa={empresa.data ?? null} periodoLabel={formatarPeriodo()} />
+      )}
     </div>
   );
 }
@@ -753,7 +762,13 @@ function ViewAberto({ sort, empresaIncompleta, onErroImpressao, empresa, periodo
 
 // ─── Aba: Preço real ───────────────────────────────────────────────────
 
-function ViewPrecoReal() {
+function ViewPrecoReal({
+  empresa,
+  periodoLabel,
+}: {
+  empresa: EmpresaRow | null;
+  periodoLabel: string;
+}) {
   const dados = useRelatorioPrecoReal();
   const itens = dados.data;
 
@@ -826,6 +841,60 @@ function ViewPrecoReal() {
     [itensFiltrados],
   );
 
+  function montarDadosRelatorio(): DadosRelatorio {
+    const enderecoCompleto = empresa
+      ? [
+          empresa.endereco,
+          [empresa.cidade, empresa.uf].filter(Boolean).join('/'),
+          empresa.cep ? `CEP ${empresa.cep}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      : '';
+
+    return {
+      empresa: {
+        nome_fantasia: empresa?.nome_fantasia ?? 'AC INDÚSTRIA',
+        razao_social: empresa?.razao_social ?? undefined,
+        cnpj: empresa?.cnpj ?? undefined,
+        endereco: enderecoCompleto || undefined,
+        telefone: empresa?.telefone ?? undefined,
+        email: empresa?.email ?? undefined,
+      },
+      periodo: { label: periodoLabel },
+      filtros: {
+        material: filtroMaterial || undefined,
+        cliente: filtroCliente || undefined,
+      },
+      resumo,
+      porMaterial,
+      porCliente,
+      detalhado: itensOrdenados.map((i) => ({
+        numero: i.nf.numero,
+        data: i.nf.data,
+        cliente_nome: i.cliente_nome,
+        material: i.material,
+        peso: i.pesoOrigem,
+        valor_pago: i.valorPago,
+        preco_real: i.precoReal,
+      })),
+    };
+  }
+
+  function handleImprimir() {
+    imprimirPrecoReal(montarDadosRelatorio());
+  }
+
+  function handleBaixarPDF() {
+    baixarPDFRelatorio(montarDadosRelatorio());
+  }
+
+  function handleExportarExcel() {
+    exportarExcelRelatorio(montarDadosRelatorio());
+  }
+
+  const semDados = resumo.totalNFs === 0;
+
   if (dados.isLoading) {
     return (
       <Card className="p-8 text-center text-text-2 text-sm">
@@ -887,6 +956,34 @@ function ViewPrecoReal() {
           </div>
         </div>
       </Card>
+
+      {/* Botões de exportação */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={handleImprimir}
+          disabled={semDados}
+          className="px-4 h-10 rounded-lg text-sm bg-surface-2 text-text-2 border border-border hover:text-text hover:border-accent transition inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:text-text-2"
+        >
+          🖨️ Imprimir
+        </button>
+        <button
+          type="button"
+          onClick={handleBaixarPDF}
+          disabled={semDados}
+          className="px-4 h-10 rounded-lg text-sm bg-surface-2 text-text-2 border border-border hover:text-text hover:border-accent transition inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:text-text-2"
+        >
+          📥 Baixar PDF
+        </button>
+        <button
+          type="button"
+          onClick={handleExportarExcel}
+          disabled={semDados}
+          className="px-4 h-10 rounded-lg text-sm bg-surface-2 text-text-2 border border-border hover:text-text hover:border-accent transition inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:text-text-2"
+        >
+          📊 Exportar Excel
+        </button>
+      </div>
 
       {/* Cards de resumo */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
