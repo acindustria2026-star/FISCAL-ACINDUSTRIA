@@ -71,25 +71,9 @@ export function formatPeso(value: number | string | null | undefined): string {
   return `${formatNumber(value, 3)} kg`;
 }
 
-export function formatDate(value: string | Date | null | undefined): string {
-  if (!value) return '';
-  const d = typeof value === 'string' ? new Date(value) : value;
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('pt-BR');
-}
-
-export function formatDateTime(value: string | Date | null | undefined): string {
-  if (!value) return '';
-  const d = typeof value === 'string' ? new Date(value) : value;
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
+// Datas: delega pra dataUtils.ts, que faz fuso de Brasília corretamente
+// (sem o bug clássico de "1 dia antes" em colunas YYYY-MM-DD).
+export { formatarData as formatDate, formatarDataHora as formatDateTime } from './dataUtils';
 
 export function parseBRLToNumber(value: string | null | undefined): number {
   if (!value) return 0;
@@ -137,7 +121,4 @@ export function kg(value: number | string | null | undefined): string {
   return `${n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`;
 }
 
-export function formatarData(value: string | Date | null | undefined): string {
-  if (!value) return '—';
-  return formatDate(value) || '—';
-}
+export { formatarData, formatarDataHora, dataHojeISO, diasEntre } from './dataUtils';

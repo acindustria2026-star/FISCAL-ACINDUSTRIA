@@ -23,6 +23,7 @@ import {
 import { usePedidosAtivosDoCliente, type PedidoComEntregue } from '../../hooks/usePedidos';
 import { calcularImpostos, ALIQUOTAS_PADRAO } from '../../utils/calculos';
 import { brl, brl4, kg as fmtKg } from '../../lib/formatters';
+import { dataHojeISO, formatarData } from '../../lib/dataUtils';
 import {
   MOTIVOS_COMPLEMENTAR,
   nfFormSchema,
@@ -49,7 +50,7 @@ interface Props {
 type ModoComp = 'nova' | 'substituir';
 
 const formDefault = (ctx: ModalNfContexto): NfFormData => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dataHojeISO();
   if (ctx.kind === 'editar') {
     const n = ctx.nf;
     return {
@@ -748,7 +749,7 @@ function CriadoEditadoPor({ nf }: { nf: NfComRelacoes }) {
     if (diff < 3600) return `há ${Math.floor(diff / 60)} min`;
     if (diff < 86400) return `há ${Math.floor(diff / 3600)} h`;
     if (diff < 86400 * 30) return `há ${Math.floor(diff / 86400)} dias`;
-    return new Date(iso).toLocaleDateString('pt-BR');
+    return formatarData(iso);
   }
   const partes: string[] = [];
   if (nf.criado_por?.nome) partes.push(`Criada por ${nf.criado_por.nome} · ${relativo(nf.created_at)}`);

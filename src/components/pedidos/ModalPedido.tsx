@@ -10,6 +10,7 @@ import { useClientes, useCriarCliente } from '../../hooks/useClientes';
 import { useCriarMaterial, useMateriais } from '../../hooks/useMateriais';
 import { useCriarPedido, useEditarPedido } from '../../hooks/usePedidos';
 import { pedidoFormSchema, type PedidoFormData } from '../../schemas/pedido';
+import { dataHojeISO } from '../../lib/dataUtils';
 import type { ClienteRow, MaterialRow, PedidoRow } from '../../types/database';
 
 export type ModalPedidoContexto =
@@ -23,7 +24,7 @@ interface Props {
 }
 
 const formDefault = (ctx: ModalPedidoContexto): PedidoFormData => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dataHojeISO();
   if (ctx.kind === 'editar') {
     const p = ctx.pedido;
     return {

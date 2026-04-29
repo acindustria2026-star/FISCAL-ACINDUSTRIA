@@ -11,6 +11,7 @@ import { useAuditoria, type FiltrosAuditoria } from '../hooks/useAuditoria';
 import { useUsuarios } from '../hooks/useUsuarios';
 import { usePapel } from '../hooks/usePapel';
 import { exportarCSV } from '../utils/exportarCSV';
+import { formatarData, formatarDataHora, dataHojeISO } from '../lib/dataUtils';
 import type { AcaoAuditoria } from '../types/database';
 
 const ACOES: { value: AcaoAuditoria; label: string }[] = [
@@ -67,17 +68,21 @@ export default function Auditoria() {
 
   function baixarCSV() {
     if (itens.length === 0) return;
-    const linhas = itens.map((i) => [
-      new Date(i.created_at).toLocaleDateString('pt-BR'),
-      new Date(i.created_at).toLocaleTimeString('pt-BR'),
-      i.usuario_nome,
-      i.acao,
-      humanizarRecurso(i.recurso),
-      i.recurso_id ?? '',
-      textoAcao(i),
-      i.detalhes ?? {},
-    ]);
-    const data = new Date().toISOString().slice(0, 10);
+    const linhas = itens.map((i) => {
+      const dataHora = formatarDataHora(i.created_at);
+      const [dataPart, horaPart] = dataHora.split(' ');
+      return [
+        dataPart ?? formatarData(i.created_at),
+        horaPart ?? '',
+        i.usuario_nome,
+        i.acao,
+        humanizarRecurso(i.recurso),
+        i.recurso_id ?? '',
+        textoAcao(i),
+        i.detalhes ?? {},
+      ];
+    });
+    const data = dataHojeISO();
     exportarCSV(
       `auditoria-${data}`,
       ['Data', 'Hora', 'Usuário', 'Ação', 'Recurso', 'ID', 'Descrição', 'Detalhes (JSON)'],

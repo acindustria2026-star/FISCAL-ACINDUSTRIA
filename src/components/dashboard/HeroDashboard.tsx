@@ -19,6 +19,7 @@ function saudacao(): string {
 
 function dataExtenso(): string {
   return new Date().toLocaleDateString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
     weekday: 'short',
     day: '2-digit',
     month: 'short',

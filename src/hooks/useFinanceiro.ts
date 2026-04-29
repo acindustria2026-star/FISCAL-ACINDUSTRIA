@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { usePeriodo } from '../contexts/PeriodoContext';
+import { dataHojeISO } from '../lib/dataUtils';
 import type { NotaFiscalRow, RecebimentoRow } from '../types/database';
 
 export type CategoriaFinanceiro = 'pago' | 'aReceber' | 'atrasada';
@@ -187,7 +188,7 @@ export function useMarcarPagoPorNf() {
       if (errRec) throw errRec;
       if (!rec) throw new Error('NF ainda não tem recebimento — lance primeiro');
 
-      const today = new Date().toISOString().slice(0, 10);
+      const today = dataHojeISO();
       const { error } = await supabase
         .from('recebimentos')
         .update({

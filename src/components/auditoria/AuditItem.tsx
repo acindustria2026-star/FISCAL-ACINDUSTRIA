@@ -13,6 +13,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
+import { formatarData, formatarDataHora } from '../../lib/dataUtils';
 import type { AuditoriaItem } from '../../hooks/useAuditoria';
 import type { AcaoAuditoria } from '../../types/database';
 
@@ -75,7 +76,7 @@ function tempoRelativo(iso: string): string {
   if (diffSec < 3600) return `há ${Math.floor(diffSec / 60)} min`;
   if (diffSec < 86400) return `há ${Math.floor(diffSec / 3600)} h`;
   if (diffSec < 86400 * 30) return `há ${Math.floor(diffSec / 86400)} dias`;
-  return new Date(iso).toLocaleDateString('pt-BR');
+  return formatarData(iso);
 }
 
 function formatarValor(v: unknown): string {
@@ -191,14 +192,7 @@ export function AuditItem({ item }: { item: AuditoriaItem }) {
             <span className="text-text-2">{textoAcao(item)}</span>
           </p>
           <span className="text-xs text-text-3 font-mono-num whitespace-nowrap">
-            {tempoRelativo(item.created_at)} ·{' '}
-            {new Date(item.created_at).toLocaleString('pt-BR', {
-              day: '2-digit',
-              month: '2-digit',
-              year: '2-digit',
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
+            {tempoRelativo(item.created_at)} · {formatarDataHora(item.created_at)}
           </span>
         </div>
 

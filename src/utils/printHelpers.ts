@@ -1,6 +1,7 @@
 // Helpers compartilhados pra geração de HTML de impressão (comprovante e relatório).
 
 import type { EmpresaRow } from '../types/database';
+import { formatarData as formatarDataBrasilia } from '../lib/dataUtils';
 
 export const LOGO_SVG = `
 <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" width="78" height="78">
@@ -56,8 +57,7 @@ export function pct(n: number | null | undefined, signed = false): string {
 }
 
 export function formatarData(d: string | null | undefined): string {
-  if (!d) return '—';
-  return new Date(d).toLocaleDateString('pt-BR');
+  return formatarDataBrasilia(d);
 }
 
 export function formatarCNPJ(v: string | null | undefined): string {

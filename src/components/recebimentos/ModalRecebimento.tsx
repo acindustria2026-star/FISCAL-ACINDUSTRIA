@@ -15,6 +15,7 @@ import {
 } from '../../hooks/useRecebimentos';
 import { recebimentoFormSchema, type RecebimentoFormData } from '../../schemas/recebimento';
 import { brl, brl4, kg as fmtKg } from '../../lib/formatters';
+import { dataHojeISO } from '../../lib/dataUtils';
 import type { NotaFiscalRow } from '../../types/database';
 
 type NFParaContexto = Pick<
@@ -39,7 +40,7 @@ interface Props {
 }
 
 const formDefault = (ctx: ModalRecContexto): RecebimentoFormData => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dataHojeISO();
   if (ctx.kind === 'editar') {
     const r = ctx.recebimento;
     return {
