@@ -151,6 +151,40 @@ export function useRelatorioValorReceber(): {
   return { data: filtrados, isLoading: fin.isLoading };
 }
 
+// ─── Preço real (valor pago / peso de origem) ─────────────────────────
+
+export interface ItemPrecoReal {
+  nf: NotaFiscalRow;
+  pesoOrigem: number;
+  valorPago: number;
+  precoReal: number;
+  cliente_nome: string;
+  material: string;
+}
+
+export function useRelatorioPrecoReal(): {
+  data: ItemPrecoReal[];
+  isLoading: boolean;
+} {
+  const fin = useFinanceiro();
+  const itens: ItemPrecoReal[] = (fin.data?.itens ?? [])
+    .filter((i: ItemFinanceiro) => i.rec !== null)
+    .map((i) => {
+      const peso = Number(i.nf.peso) || 0;
+      const valorPago = Number(i.rec!.valor_pago) || 0;
+      return {
+        nf: i.nf,
+        pesoOrigem: peso,
+        valorPago,
+        precoReal: peso > 0 ? valorPago / peso : 0,
+        cliente_nome: i.nf.cliente_nome,
+        material: i.nf.material ?? '',
+      };
+    });
+
+  return { data: itens, isLoading: fin.isLoading };
+}
+
 // ─── Em aberto ────────────────────────────────────────────────────────
 
 export interface ItemEmAberto {

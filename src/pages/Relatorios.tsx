@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   AlertCircle,
   Clock,
+  Coins,
   Layers,
   Scale,
   Wallet,
@@ -24,6 +25,7 @@ import {
   useRelatorioDiferencaPeso,
   useRelatorioEmAberto,
   useRelatorioImpureza,
+  useRelatorioPrecoReal,
   useRelatorioValorReceber,
   type ItemDiferencaPeso,
   type ItemEmAberto,
@@ -33,16 +35,17 @@ import {
 import { useEmpresa } from '../hooks/useEmpresa';
 import { useOrdenacao } from '../hooks/useOrdenacao';
 import { usePeriodo } from '../contexts/PeriodoContext';
-import { brl, formatarData, kg as fmtKg } from '../lib/formatters';
+import { brl, brl4, formatarData, kg as fmtKg } from '../lib/formatters';
 import { imprimirRelatorio, type MetricaParaPrint } from '../utils/imprimirRelatorio';
 
-type Aba = 'impureza' | 'diferenca' | 'valor' | 'aberto';
+type Aba = 'impureza' | 'diferenca' | 'valor' | 'aberto' | 'precoReal';
 
 const ABAS: { key: Aba; label: string; icon: LucideIcon }[] = [
   { key: 'impureza', label: 'Impureza por material', icon: Layers },
   { key: 'diferenca', label: 'Diferença de peso', icon: Scale },
   { key: 'valor', label: 'Valor a receber', icon: Wallet },
   { key: 'aberto', label: 'Notas em aberto', icon: Clock },
+  { key: 'precoReal', label: 'Preço real', icon: Coins },
 ];
 
 export default function Relatorios() {
@@ -141,6 +144,7 @@ export default function Relatorios() {
           periodoLabel={formatarPeriodo()}
         />
       )}
+      {aba === 'precoReal' && <ViewPrecoReal />}
     </div>
   );
 }
@@ -744,6 +748,286 @@ function ViewAberto({ sort, empresaIncompleta, onErroImpressao, empresa, periodo
         minWidth={1000}
       />
     </ViewContainer>
+  );
+}
+
+// ─── Aba: Preço real ───────────────────────────────────────────────────
+
+function ViewPrecoReal() {
+  const dados = useRelatorioPrecoReal();
+  const itens = dados.data;
+
+  const [filtroMaterial, setFiltroMaterial] = useState('');
+  const [filtroCliente, setFiltroCliente] = useState('');
+
+  const materiais = useMemo(
+    () => Array.from(new Set(itens.map((i) => i.material).filter(Boolean))).sort(),
+    [itens],
+  );
+  const clientes = useMemo(
+    () => Array.from(new Set(itens.map((i) => i.cliente_nome).filter(Boolean))).sort(),
+    [itens],
+  );
+
+  const itensFiltrados = useMemo(() => {
+    return itens.filter((i) => {
+      if (filtroMaterial && i.material !== filtroMaterial) return false;
+      if (filtroCliente && i.cliente_nome !== filtroCliente) return false;
+      return true;
+    });
+  }, [itens, filtroMaterial, filtroCliente]);
+
+  const resumo = useMemo(() => {
+    const totalNFs = itensFiltrados.length;
+    const pesoTotal = itensFiltrados.reduce((s, i) => s + i.pesoOrigem, 0);
+    const valorTotal = itensFiltrados.reduce((s, i) => s + i.valorPago, 0);
+    const precoMedio = pesoTotal > 0 ? valorTotal / pesoTotal : 0;
+    return { totalNFs, pesoTotal, valorTotal, precoMedio };
+  }, [itensFiltrados]);
+
+  const porMaterial = useMemo(() => {
+    const map = new Map<string, { peso: number; valor: number; nfs: number }>();
+    for (const i of itensFiltrados) {
+      const atual = map.get(i.material) ?? { peso: 0, valor: 0, nfs: 0 };
+      atual.peso += i.pesoOrigem;
+      atual.valor += i.valorPago;
+      atual.nfs += 1;
+      map.set(i.material, atual);
+    }
+    return Array.from(map.entries())
+      .map(([material, d]) => ({
+        material,
+        ...d,
+        precoReal: d.peso > 0 ? d.valor / d.peso : 0,
+      }))
+      .sort((a, b) => b.precoReal - a.precoReal);
+  }, [itensFiltrados]);
+
+  const porCliente = useMemo(() => {
+    const map = new Map<string, { peso: number; valor: number; nfs: number }>();
+    for (const i of itensFiltrados) {
+      const atual = map.get(i.cliente_nome) ?? { peso: 0, valor: 0, nfs: 0 };
+      atual.peso += i.pesoOrigem;
+      atual.valor += i.valorPago;
+      atual.nfs += 1;
+      map.set(i.cliente_nome, atual);
+    }
+    return Array.from(map.entries())
+      .map(([cliente, d]) => ({
+        cliente,
+        ...d,
+        precoReal: d.peso > 0 ? d.valor / d.peso : 0,
+      }))
+      .sort((a, b) => b.precoReal - a.precoReal);
+  }, [itensFiltrados]);
+
+  const itensOrdenados = useMemo(
+    () => [...itensFiltrados].sort((a, b) => b.precoReal - a.precoReal),
+    [itensFiltrados],
+  );
+
+  if (dados.isLoading) {
+    return (
+      <Card className="p-8 text-center text-text-2 text-sm">
+        Carregando preço real...
+      </Card>
+    );
+  }
+
+  if (itens.length === 0) {
+    return (
+      <Card className="p-8 text-center">
+        <Coins size={28} className="mx-auto text-text-3 mb-3" />
+        <p className="text-text">Sem recebimentos no período</p>
+        <p className="text-text-2 text-sm mt-1">
+          Lance recebimentos pra calcular o preço real (valor pago ÷ peso de origem).
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Filtros */}
+      <Card className="p-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-[11px] text-text-3 uppercase tracking-[0.12em] block mb-2">
+              Material
+            </label>
+            <select
+              value={filtroMaterial}
+              onChange={(e) => setFiltroMaterial(e.target.value)}
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-accent transition"
+            >
+              <option value="">Todos os materiais</option>
+              {materiais.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] text-text-3 uppercase tracking-[0.12em] block mb-2">
+              Cliente
+            </label>
+            <select
+              value={filtroCliente}
+              onChange={(e) => setFiltroCliente(e.target.value)}
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-accent transition"
+            >
+              <option value="">Todos os clientes</option>
+              {clientes.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </Card>
+
+      {/* Cards de resumo */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card className="p-4">
+          <p className="text-[11px] text-text-3 uppercase tracking-[0.12em]">NFs processadas</p>
+          <p className="text-3xl font-medium font-mono-num mt-2 text-text">{resumo.totalNFs}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-[11px] text-text-3 uppercase tracking-[0.12em]">Peso de origem</p>
+          <p className="text-2xl font-medium font-mono-num mt-2 text-text">
+            {fmtKg(resumo.pesoTotal)}
+          </p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-[11px] text-text-3 uppercase tracking-[0.12em]">Valor pago</p>
+          <p className="text-2xl font-medium font-mono-num mt-2 text-text">
+            {brl(resumo.valorTotal)}
+          </p>
+        </Card>
+        <Card className="p-4 bg-accent-soft-bg border-accent-soft-border">
+          <p className="text-[11px] text-accent uppercase tracking-[0.12em]">
+            ⭐ Preço real médio
+          </p>
+          <p className="font-serif-display font-mono-num text-3xl text-accent mt-2">
+            {brl4(resumo.precoMedio)}
+            <span className="text-sm text-accent/70 ml-1">/kg</span>
+          </p>
+        </Card>
+      </div>
+
+      {/* Por material */}
+      <Card className="p-5">
+        <h2 className="font-serif-display text-2xl mb-4">Por material</h2>
+        <div className="flex flex-col">
+          {porMaterial.map((m) => (
+            <div
+              key={m.material}
+              className="flex items-center justify-between gap-4 border-b border-border-soft py-3 last:border-0"
+            >
+              <div className="min-w-0">
+                <p className="font-medium text-text truncate">{m.material || '—'}</p>
+                <p className="text-xs text-text-3 font-mono-num mt-0.5">
+                  {m.nfs} NF · {fmtKg(m.peso)} · {brl(m.valor)}
+                </p>
+              </div>
+              <p className="text-lg font-medium text-accent font-mono-num whitespace-nowrap">
+                {brl4(m.precoReal)}
+                <span className="text-xs text-text-3 ml-1">/kg</span>
+              </p>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Por cliente */}
+      <Card className="p-5">
+        <h2 className="font-serif-display text-2xl mb-4">Por fornecedor</h2>
+        <div className="flex flex-col">
+          {porCliente.map((c) => (
+            <div
+              key={c.cliente}
+              className="flex items-center justify-between gap-4 border-b border-border-soft py-3 last:border-0"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <AvatarCliente nome={c.cliente} size={32} />
+                <div className="min-w-0">
+                  <p className="font-medium text-text truncate">{c.cliente}</p>
+                  <p className="text-xs text-text-3 font-mono-num mt-0.5">
+                    {c.nfs} NF · {fmtKg(c.peso)} · {brl(c.valor)}
+                  </p>
+                </div>
+              </div>
+              <p className="text-lg font-medium text-accent font-mono-num whitespace-nowrap">
+                {brl4(c.precoReal)}
+                <span className="text-xs text-text-3 ml-1">/kg</span>
+              </p>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Detalhado por NF */}
+      <Card className="p-0 overflow-hidden">
+        <div className="px-5 pt-5 pb-3">
+          <h2 className="font-serif-display text-2xl">Detalhado por NF</h2>
+          <p className="text-xs text-text-3 mt-1">
+            Ordenado pelo preço real mais alto pro mais baixo
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px]">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wider text-text-3 bg-surface-2 border-y border-border-soft">
+                <th className="px-3 py-2.5 font-medium">Nº NF</th>
+                <th className="px-3 py-2.5 font-medium">Data</th>
+                <th className="px-3 py-2.5 font-medium">Cliente</th>
+                <th className="px-3 py-2.5 font-medium">Material</th>
+                <th className="px-3 py-2.5 font-medium text-right">Peso origem</th>
+                <th className="px-3 py-2.5 font-medium text-right">Valor pago</th>
+                <th className="px-3 py-2.5 font-medium text-right">Preço real</th>
+              </tr>
+            </thead>
+            <tbody>
+              {itensOrdenados.map((i) => (
+                <tr
+                  key={i.nf.id}
+                  className="border-b border-border-soft last:border-0 hover:bg-surface-2 transition"
+                >
+                  <td className="px-3 py-3 font-mono-num text-text">{i.nf.numero}</td>
+                  <td className="px-3 py-3 font-mono-num text-text-2 whitespace-nowrap">
+                    {formatarData(i.nf.data)}
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <AvatarCliente nome={i.cliente_nome} size={26} />
+                      <span className="text-text truncate">{i.cliente_nome}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-3 text-text-2">{i.material || '—'}</td>
+                  <td className="px-3 py-3 text-right font-mono-num text-text-2">
+                    {fmtKg(i.pesoOrigem)}
+                  </td>
+                  <td className="px-3 py-3 text-right font-mono-num text-text">
+                    {brl(i.valorPago)}
+                  </td>
+                  <td className="px-3 py-3 text-right font-mono-num text-accent font-medium whitespace-nowrap">
+                    {brl4(i.precoReal)}
+                    <span className="text-xs text-text-3 ml-1">/kg</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {itensOrdenados.length === 0 && (
+          <p className="text-center text-text-2 text-sm py-8">
+            Nenhuma NF bateu nos filtros aplicados.
+          </p>
+        )}
+      </Card>
+    </div>
   );
 }
 
