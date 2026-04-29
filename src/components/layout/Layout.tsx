@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { MobileNav } from './MobileNav';
+import { LembreteBackup } from '../LembreteBackup';
 import { useRealtime } from '../../hooks/useRealtime';
 
 export function Layout() {
@@ -17,6 +18,7 @@ export function Layout() {
           <Outlet />
         </main>
       </div>
+      <LembreteBackup />
     </div>
   );
 }

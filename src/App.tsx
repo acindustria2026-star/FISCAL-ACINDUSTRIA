@@ -19,6 +19,7 @@ import Relatorios from './pages/Relatorios';
 import Auditoria from './pages/Auditoria';
 import Equipe from './pages/Equipe';
 import AceitarConvite from './pages/AceitarConvite';
+import Backup from './pages/Backup';
 
 export default function App() {
   const { perfil, carregando, setupNeeded } = useAuth();
@@ -65,6 +66,7 @@ export default function App() {
         <Route path="/relatorios" element={<Relatorios />} />
         <Route path="/auditoria" element={<Auditoria />} />
         <Route path="/equipe" element={<Equipe />} />
+        <Route path="/backup" element={<Backup />} />
       </Route>
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

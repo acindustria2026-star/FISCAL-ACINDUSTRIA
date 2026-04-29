@@ -4,6 +4,7 @@ import {
   Database,
   FileText,
   GitCompare,
+  HardDrive,
   LayoutDashboard,
   Package,
   PackageCheck,
@@ -102,6 +103,14 @@ export const MENU: MenuEntry[] = [
     label: 'Auditoria',
     icone: ShieldCheck,
     papeis: ['ADMIN'],
+  },
+  { type: 'separator', papeis: ['ADMIN', 'OPERADOR', 'FINANCEIRO'] },
+  {
+    type: 'item',
+    path: '/backup',
+    label: 'Backup',
+    icone: HardDrive,
+    papeis: ['ADMIN', 'OPERADOR', 'FINANCEIRO'],
   },
 ];
 
