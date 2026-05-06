@@ -97,7 +97,21 @@ export function CardComparativo({ item, selecionada, onToggleSelecao }: Props) {
                 <BlocoComparativo titulo="Peso">
                   <LinhaComparativo label="Emitido" valor={fmtKg(c.pesoEmitido)} />
                   <LinhaComparativo
+                    label="Recebido bruto"
+                    valor={c.rec?.peso_bruto != null ? fmtKg(c.rec.peso_bruto) : '—'}
+                  />
+                  <LinhaComparativo
+                    label="Impureza"
+                    cor={c.rec?.impureza_kg != null && Number(c.rec.impureza_kg) > 0 ? 'warn' : 'muted'}
+                    valor={
+                      c.rec?.impureza_kg != null
+                        ? `− ${fmtKg(c.rec.impureza_kg)}`
+                        : '—'
+                    }
+                  />
+                  <LinhaComparativo
                     label="Recebido líq."
+                    destaque
                     valor={c.pesoLiquido !== null ? fmtKg(c.pesoLiquido) : '—'}
                   />
                   <LinhaComparativo
