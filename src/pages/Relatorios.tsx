@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import {
   AlertCircle,
+  CheckCircle2,
   Clock,
   Coins,
   Layers,
   Scale,
-  Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -25,12 +25,12 @@ import {
   useRelatorioDiferencaPeso,
   useRelatorioEmAberto,
   useRelatorioImpureza,
+  useRelatorioNotasPagas,
   useRelatorioPrecoReal,
-  useRelatorioValorReceber,
   type ItemDiferencaPeso,
   type ItemEmAberto,
   type ItemImpureza,
-  type ItemValorReceber,
+  type ItemNotaPaga,
 } from '../hooks/useRelatorios';
 import { useEmpresa } from '../hooks/useEmpresa';
 import { useOrdenacao } from '../hooks/useOrdenacao';
@@ -45,13 +45,13 @@ import {
 } from '../lib/relatorioPrecoReal';
 import type { EmpresaRow } from '../types/database';
 
-type Aba = 'impureza' | 'diferenca' | 'valor' | 'aberto' | 'precoReal';
+type Aba = 'impureza' | 'diferenca' | 'aberto' | 'pagas' | 'precoReal';
 
 const ABAS: { key: Aba; label: string; icon: LucideIcon }[] = [
   { key: 'impureza', label: 'Impureza por material', icon: Layers },
   { key: 'diferenca', label: 'Diferença de peso', icon: Scale },
-  { key: 'valor', label: 'Valor a receber', icon: Wallet },
   { key: 'aberto', label: 'Notas em aberto', icon: Clock },
+  { key: 'pagas', label: 'Notas pagas', icon: CheckCircle2 },
   { key: 'precoReal', label: 'Preço real', icon: Coins },
 ];
 
@@ -133,8 +133,8 @@ export default function Relatorios() {
           periodoLabel={formatarPeriodo()}
         />
       )}
-      {aba === 'valor' && (
-        <ViewValor
+      {aba === 'aberto' && (
+        <ViewAberto
           sort={sort}
           empresaIncompleta={empresaIncompleta}
           onErroImpressao={(m) => toast.error(m)}
@@ -142,8 +142,8 @@ export default function Relatorios() {
           periodoLabel={formatarPeriodo()}
         />
       )}
-      {aba === 'aberto' && (
-        <ViewAberto
+      {aba === 'pagas' && (
+        <ViewPagas
           sort={sort}
           empresaIncompleta={empresaIncompleta}
           onErroImpressao={(m) => toast.error(m)}
@@ -456,25 +456,23 @@ function ViewDiferenca({ sort, empresaIncompleta, onErroImpressao, empresa, peri
   );
 }
 
-// ─── Aba: Valor a receber ──────────────────────────────────────────────
+// ─── Aba: Notas pagas (NFs com recebimento + pago=true) ────────────────
 
-function ViewValor({ sort, empresaIncompleta, onErroImpressao, empresa, periodoLabel }: ViewProps) {
-  const dados = useRelatorioValorReceber();
+function ViewPagas({ sort, empresaIncompleta, onErroImpressao, empresa, periodoLabel }: ViewProps) {
+  const dados = useRelatorioNotasPagas();
   const itens = dados.data;
 
   const metricas: MetricaSlim[] = useMemo(() => {
-    const total = itens.reduce((s, i) => s + i.valor, 0);
-    const atrasadas = itens.filter((i) => i.status === 'atrasada');
-    const totalAtrasado = atrasadas.reduce((s, i) => s + i.valor, 0);
+    const totalValor = itens.reduce((s, i) => s + i.valorPago, 0);
+    const totalPeso = itens.reduce((s, i) => s + Number(i.nf.peso), 0);
     return [
-      { label: 'Total a receber', valor: brl(total), tom: 'accent' },
-      { label: 'NFs', valor: itens.length },
-      { label: 'Atrasadas', valor: atrasadas.length, tom: atrasadas.length > 0 ? 'warn' : 'default' },
-      { label: 'Total atrasado', valor: brl(totalAtrasado), tom: totalAtrasado > 0 ? 'warn' : 'default' },
+      { label: 'NFs pagas', valor: itens.length, tom: 'accent' },
+      { label: 'Peso total', valor: fmtKg(totalPeso) },
+      { label: 'Valor pago total', valor: brl(totalValor), tom: 'accent' },
     ];
   }, [itens]);
 
-  const colunas: ColunaRelatorio<ItemValorReceber>[] = [
+  const colunas: ColunaRelatorio<ItemNotaPaga>[] = [
     {
       key: 'numero',
       label: 'Nº NF',
@@ -485,8 +483,8 @@ function ViewValor({ sort, empresaIncompleta, onErroImpressao, empresa, periodoL
       total: () => 'Total',
     },
     {
-      key: 'emissao',
-      label: 'Emissão',
+      key: 'data',
+      label: 'Data NF',
       ordenavel: true,
       extrair: (i) => i.nf.data,
       render: (i) => (
@@ -495,69 +493,6 @@ function ViewValor({ sort, empresaIncompleta, onErroImpressao, empresa, periodoL
         </span>
       ),
       printValue: (i) => formatarData(i.nf.data),
-    },
-    {
-      key: 'vencimento',
-      label: 'Vencimento',
-      ordenavel: true,
-      extrair: (i) => i.vencimento,
-      render: (i) => (
-        <span
-          className={`font-mono-num whitespace-nowrap ${
-            i.status === 'atrasada' ? 'text-warn' : 'text-text-2'
-          }`}
-        >
-          {i.vencimento ? formatarData(i.vencimento) : '—'}
-        </span>
-      ),
-      printValue: (i) => (i.vencimento ? formatarData(i.vencimento) : '—'),
-    },
-    {
-      key: 'valor',
-      label: 'Valor',
-      ordenavel: true,
-      align: 'right',
-      extrair: (i) => i.valor,
-      render: (i) => <span className="font-medium text-text">{brl(i.valor)}</span>,
-      printValue: (i) => brl(i.valor),
-      total: (arr) => brl(arr.reduce((s, i) => s + i.valor, 0)),
-      printTotal: (arr) => brl(arr.reduce((s, i) => s + i.valor, 0)),
-    },
-    {
-      key: 'dias',
-      label: 'Em aberto',
-      ordenavel: true,
-      align: 'right',
-      extrair: (i) => i.diasEmAberto,
-      render: (i) => <span className="text-text-2 font-mono-num">{i.diasEmAberto}d</span>,
-      printValue: (i) => `${i.diasEmAberto}d`,
-    },
-    {
-      key: 'status',
-      label: 'Status',
-      ordenavel: true,
-      extrair: (i) => i.status,
-      render: (i) => (
-        <span
-          className={`inline-block px-2 py-0.5 rounded-md text-xs border ${
-            i.status === 'atrasada'
-              ? 'bg-warn-soft-bg text-warn border-warn-soft-border'
-              : 'bg-amber-soft-bg text-amber border-amber-soft-border'
-          }`}
-        >
-          {i.status === 'atrasada'
-            ? `Atrasada · ${i.diasAtraso ?? 0}d`
-            : i.diasParaVencer !== null
-              ? `Vence em ${i.diasParaVencer}d`
-              : 'Aguardando'}
-        </span>
-      ),
-      printValue: (i) =>
-        i.status === 'atrasada'
-          ? `Atrasada · ${i.diasAtraso ?? 0}d`
-          : i.diasParaVencer !== null
-            ? `Vence em ${i.diasParaVencer}d`
-            : 'Aguardando',
     },
     {
       key: 'cliente',
@@ -572,11 +507,53 @@ function ViewValor({ sort, empresaIncompleta, onErroImpressao, empresa, periodoL
       ),
       printValue: (i) => i.cliente_nome,
     },
+    {
+      key: 'material',
+      label: 'Material',
+      ordenavel: true,
+      extrair: (i) => i.nf.material ?? '',
+      render: (i) => <span className="text-text-2">{i.nf.material ?? '—'}</span>,
+      printValue: (i) => i.nf.material ?? '—',
+    },
+    {
+      key: 'peso',
+      label: 'Peso',
+      ordenavel: true,
+      align: 'right',
+      extrair: (i) => Number(i.nf.peso),
+      render: (i) => fmtKg(i.nf.peso),
+      printValue: (i) => fmtKg(i.nf.peso),
+      total: (arr) => fmtKg(arr.reduce((s, i) => s + Number(i.nf.peso), 0)),
+      printTotal: (arr) => fmtKg(arr.reduce((s, i) => s + Number(i.nf.peso), 0)),
+    },
+    {
+      key: 'valor_pago',
+      label: 'Valor pago',
+      ordenavel: true,
+      align: 'right',
+      extrair: (i) => i.valorPago,
+      render: (i) => <span className="font-medium text-accent">{brl(i.valorPago)}</span>,
+      printValue: (i) => brl(i.valorPago),
+      total: (arr) => brl(arr.reduce((s, i) => s + i.valorPago, 0)),
+      printTotal: (arr) => brl(arr.reduce((s, i) => s + i.valorPago, 0)),
+    },
+    {
+      key: 'data_pagamento',
+      label: 'Data pagto',
+      ordenavel: true,
+      extrair: (i) => i.dataPagamento ?? '',
+      render: (i) => (
+        <span className="font-mono-num text-text-2 whitespace-nowrap">
+          {i.dataPagamento ? formatarData(i.dataPagamento) : '—'}
+        </span>
+      ),
+      printValue: (i) => (i.dataPagamento ? formatarData(i.dataPagamento) : '—'),
+    },
   ];
 
   function imprimir() {
     const r = montarImpressao({
-      titulo: 'Relatório de valor a receber',
+      titulo: 'Relatório de notas pagas',
       itens,
       colunas,
       metricas,
@@ -590,9 +567,9 @@ function ViewValor({ sort, empresaIncompleta, onErroImpressao, empresa, periodoL
   return (
     <ViewContainer
       cabecalho={{
-        icon: Wallet,
-        titulo: 'Valor a receber',
-        descricao: 'NFs pendentes e atrasadas no período (recebido fica fora).',
+        icon: CheckCircle2,
+        titulo: 'Notas pagas',
+        descricao: 'NFs com recebimento conferido e pagamento realizado.',
         onImprimir: imprimir,
         empresaIncompleta,
       }}
@@ -605,9 +582,9 @@ function ViewValor({ sort, empresaIncompleta, onErroImpressao, empresa, periodoL
         onToggle={sort.toggle}
         isLoading={dados.isLoading}
         rowKey={(i) => i.nf.id}
-        emptyTitulo="Sem pendências no período"
-        emptyDescricao="Tudo já foi pago — bom trabalho."
-        emptyIcon={<Wallet size={28} />}
+        emptyTitulo="Nenhuma NF paga neste período"
+        emptyDescricao="Quando recebimentos forem marcados como pagos, aparecem aqui."
+        emptyIcon={<CheckCircle2 size={28} />}
         minWidth={1100}
       />
     </ViewContainer>

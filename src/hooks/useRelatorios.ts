@@ -114,41 +114,30 @@ export function useRelatorioDiferencaPeso(): {
   return { data: filtrados, isLoading: comp.isLoading };
 }
 
-// ─── Valor a receber ───────────────────────────────────────────────────
+// ─── Notas pagas (NFs com recebimento + pago=true) ─────────────────────
 
-export interface ItemValorReceber {
+export interface ItemNotaPaga {
   nf: NotaFiscalRow;
-  valor: number;
-  vencimento: string | null;
-  diasEmAberto: number;
-  diasAtraso: number | null;
-  diasParaVencer: number | null;
-  status: 'aReceber' | 'atrasada';
+  valorPago: number;
+  dataPagamento: string | null;
   cliente_nome: string;
 }
 
-export function useRelatorioValorReceber(): {
-  data: ItemValorReceber[];
+export function useRelatorioNotasPagas(): {
+  data: ItemNotaPaga[];
   isLoading: boolean;
 } {
   const fin = useFinanceiro();
-  const filtrados: ItemValorReceber[] = (fin.data?.itens ?? [])
-    .filter(
-      (i: ItemFinanceiro): i is ItemFinanceiro & { categoria: 'aReceber' | 'atrasada' } =>
-        i.categoria !== 'pago',
-    )
+  const itens: ItemNotaPaga[] = (fin.data?.itens ?? [])
+    .filter((i: ItemFinanceiro) => i.categoria === 'pago' && i.rec !== null)
     .map((i) => ({
       nf: i.nf,
-      valor: i.valorAcordado,
-      vencimento: i.dataPagamento,
-      diasEmAberto: i.diasDesdeEmissao,
-      diasAtraso: i.diasAtraso,
-      diasParaVencer: i.diasParaVencer,
-      status: i.categoria,
+      valorPago: Number(i.rec!.valor_pago) || 0,
+      dataPagamento: i.rec!.data_pagamento,
       cliente_nome: i.nf.cliente_nome,
     }));
 
-  return { data: filtrados, isLoading: fin.isLoading };
+  return { data: itens, isLoading: fin.isLoading };
 }
 
 // ─── Preço real (valor pago / peso de origem) ─────────────────────────
