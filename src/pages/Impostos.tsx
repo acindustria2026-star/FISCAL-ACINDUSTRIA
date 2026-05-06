@@ -26,7 +26,7 @@ const fmtBRL = (n: number) =>
   n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function Impostos() {
-  const { isAdmin, isFinanceiro } = usePapel();
+  const { isAdmin, isOperador, isFinanceiro } = usePapel();
   const [nfs, setNfs] = useState<NFImposto[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [filtroMaterial, setFiltroMaterial] = useState('');
@@ -155,7 +155,7 @@ export default function Impostos() {
     [nfs],
   );
 
-  if (!isAdmin && !isFinanceiro) return <Navigate to="/dashboard" replace />;
+  if (!isAdmin && !isOperador && !isFinanceiro) return <Navigate to="/dashboard" replace />;
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">

@@ -14,9 +14,9 @@ export default function Cadastros() {
   const [aba, setAba] = useState<Aba>('empresa');
   const clientes = useClientes();
   const materiais = useMateriais();
-  const { isAdmin, isOperador } = usePapel();
+  const { isAdmin, isOperador, isFinanceiro } = usePapel();
 
-  if (!isAdmin && !isOperador) return <Navigate to="/dashboard" replace />;
+  if (!isAdmin && !isOperador && !isFinanceiro) return <Navigate to="/dashboard" replace />;
 
   return (
     <div className="max-w-6xl mx-auto">

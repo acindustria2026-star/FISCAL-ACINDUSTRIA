@@ -36,7 +36,7 @@ const filtrosIniciais: Filtros = {
 };
 
 export default function Financeiro() {
-  const { isAdmin, isFinanceiro } = usePapel();
+  const { isAdmin, isOperador, isFinanceiro } = usePapel();
   const dados = useFinanceiro();
   const marcarPago = useMarcarPagoPorNf();
   const { formatarPeriodo } = usePeriodo();
@@ -47,7 +47,7 @@ export default function Financeiro() {
   const sort = useOrdenacao();
   const [modalRec, setModalRec] = useState<ModalRecContexto | null>(null);
 
-  if (!isAdmin && !isFinanceiro) return <Navigate to="/dashboard" replace />;
+  if (!isAdmin && !isOperador && !isFinanceiro) return <Navigate to="/dashboard" replace />;
 
   const itens = dados.data?.itens ?? [];
   const metricas = dados.data?.metricas ?? {

@@ -37,9 +37,9 @@ type StatusSalvar = 'idle' | 'salvando' | 'salvo' | 'erro';
 export function AbaEmpresa() {
   const empresa = useEmpresa();
   const atualizar = useAtualizarEmpresa();
-  const { isAdmin } = usePapel();
+  const { podeConfigurarEmpresa } = usePapel();
   const toast = useToast();
-  const readonly = !isAdmin;
+  const readonly = !podeConfigurarEmpresa;
 
   const [form, setForm] = useState<EmpresaRow | null>(null);
   const pendentes = useRef<Partial<EmpresaRow>>({});

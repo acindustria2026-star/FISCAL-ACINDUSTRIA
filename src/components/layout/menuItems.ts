@@ -39,7 +39,7 @@ export const MENU: MenuEntry[] = [
     path: '/pedidos',
     label: 'Pedidos',
     icone: Package,
-    papeis: ['ADMIN', 'OPERADOR'],
+    papeis: ['ADMIN', 'OPERADOR', 'FINANCEIRO'],
   },
   {
     type: 'item',
@@ -60,21 +60,21 @@ export const MENU: MenuEntry[] = [
     path: '/recebimentos',
     label: 'Recebimentos',
     icone: PackageCheck,
-    papeis: ['ADMIN', 'OPERADOR'],
+    papeis: ['ADMIN', 'OPERADOR', 'FINANCEIRO'],
   },
   {
     type: 'item',
     path: '/financeiro',
     label: 'Financeiro',
     icone: Wallet,
-    papeis: ['ADMIN', 'FINANCEIRO'],
+    papeis: ['ADMIN', 'OPERADOR', 'FINANCEIRO'],
   },
   {
     type: 'item',
     path: '/impostos',
     label: 'Impostos',
     icone: Receipt,
-    papeis: ['ADMIN', 'FINANCEIRO'],
+    papeis: ['ADMIN', 'OPERADOR', 'FINANCEIRO'],
   },
   {
     type: 'item',
@@ -95,7 +95,7 @@ export const MENU: MenuEntry[] = [
     path: '/cadastros',
     label: 'Cadastros',
     icone: Database,
-    papeis: ['ADMIN', 'OPERADOR'],
+    papeis: ['ADMIN', 'OPERADOR', 'FINANCEIRO'],
   },
   { type: 'separator', papeis: ['ADMIN'] },
   {
