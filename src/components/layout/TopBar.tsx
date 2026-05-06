@@ -43,7 +43,7 @@ export function TopBar() {
   const pills = useMemo(montarPills, []);
 
   return (
-    <header className="hidden md:flex items-center justify-between gap-4 px-8 h-16 border-b border-border bg-bg/95 backdrop-blur-sm sticky top-0 z-20">
+    <header className="no-print hidden md:flex items-center justify-between gap-4 px-8 h-16 border-b border-border bg-bg/95 backdrop-blur-sm sticky top-0 z-20">
       <div className="flex items-center gap-2 text-xs font-mono-num text-text-3">
         <span>Período</span>
         <span>/</span>

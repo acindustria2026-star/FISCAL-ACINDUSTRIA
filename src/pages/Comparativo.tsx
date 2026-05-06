@@ -84,7 +84,7 @@ export default function Comparativo() {
   const empresaIncompleta =
     !empresa.data || !empresa.data.nome_fantasia || !empresa.data.cnpj;
 
-  function imprimir() {
+  async function imprimir() {
     if (!empresa.data) {
       toast.error('Empresa não carregada');
       return;
@@ -97,7 +97,7 @@ export default function Comparativo() {
       toast.error('Selecione ao menos uma NF');
       return;
     }
-    const r = imprimirComprovante(itensSelecionados, empresa.data);
+    const r = await imprimirComprovante(itensSelecionados, empresa.data);
     if (!r.ok) toast.error(r.motivo ?? 'Erro ao abrir impressão');
   }
 

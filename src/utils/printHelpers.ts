@@ -3,17 +3,15 @@
 import type { EmpresaRow } from '../types/database';
 import { formatarData as formatarDataBrasilia } from '../lib/dataUtils';
 
+// Logo da empresa servida em /logo.jpg — usa URL absoluta porque a janela
+// de impressão é aberta com window.open('') e não tem base URL relativa.
+const LOGO_URL =
+  typeof window !== 'undefined' ? `${window.location.origin}/logo.jpg` : '/logo.jpg';
+
 export const LOGO_SVG = `
-<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" width="78" height="78">
-  <defs>
-    <linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#D4A017"/>
-      <stop offset="100%" stop-color="#A57D0D"/>
-    </linearGradient>
-  </defs>
-  <rect width="100" height="100" rx="20" fill="url(#lg)"/>
-  <text x="50" y="68" font-family="Georgia, 'Times New Roman', serif" font-size="56" font-weight="600" text-anchor="middle" fill="#0B0B0D">F</text>
-</svg>
+<div style="width:90px;height:90px;border-radius:14px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.08)">
+  <img src="${LOGO_URL}" alt="Logo" style="width:100%;height:100%;object-fit:contain" />
+</div>
 `.trim();
 
 export function esc(s: string | null | undefined): string {

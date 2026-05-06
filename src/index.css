@@ -94,3 +94,12 @@ body {
     padding-right: env(safe-area-inset-right);
   }
 }
+
+/* Print: esconde elementos da app que não devem aparecer no comprovante.
+   O comprovante em si abre em popup novo, mas se o usuário tentar imprimir
+   alguma página normal, sidebar/topbar/mobilenav somem. */
+@media print {
+  body { background: #fff !important; color: #000 !important; }
+  .no-print { display: none !important; }
+  @page { size: A4; margin: 1.5cm; }
+}

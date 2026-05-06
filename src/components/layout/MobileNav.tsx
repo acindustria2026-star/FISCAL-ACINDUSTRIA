@@ -30,7 +30,7 @@ export function MobileNav({ className = '' }: MobileNavProps) {
   }, [aberto]);
 
   return (
-    <div className={className}>
+    <div className={`no-print ${className}`}>
       <header className="sticky top-0 z-30 flex items-center justify-between h-14 px-4 bg-surface border-b border-border">
         <button
           type="button"
