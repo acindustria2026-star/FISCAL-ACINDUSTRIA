@@ -15,7 +15,22 @@
       "Bash(git remote *)",
       "Bash(git push *)",
       "Bash(grep -nB1 -A1 'type=\"number\"' \"c:/Users/heryc/OneDrive/Área de Trabalho/FISCAL/src/components/nfs/ModalNF.tsx\")",
-      "Bash(npm uninstall *)"
+      "Bash(npm uninstall *)",
+      "Bash(git stash *)",
+      "PowerShell(cmdkey /delete:git:https://github.com 2>&1)",
+      "PowerShell(git remote set-url origin https://github.com/acindustria2026-star/FISCAL-ACINDUSTRIA.git)",
+      "PowerShell(git config --global credential.helper manager)",
+      "Bash(git credential *)",
+      "Bash(GCM_TRACE=1 GCM_TRACE_SECRETS=0 printf \"protocol=https\\\\nhost=github.com\\\\n\\\\n\")",
+      "Bash(tasklist /FI \"IMAGENAME eq git-credential-manager.exe\")",
+      "Bash(jobs)",
+      "Bash(GCM_TRACE=1 GCM_TRACE_SECRETS=0 sh -c 'printf \"protocol=https\\\\nhost=github.com\\\\n\\\\n\" | git credential fill')",
+      "Bash(git ls-remote *)",
+      "Bash(vercel --version)",
+      "Bash(npx vercel *)",
+      "Bash(vercel whoami *)",
+      "PowerShell(cmdkey /list)",
+      "Bash(git pull *)"
     ]
   }
 }
