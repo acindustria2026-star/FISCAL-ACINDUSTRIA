@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   AlertCircle,
+  Boxes,
   CheckCircle2,
   Clock,
   Coins,
@@ -33,6 +34,7 @@ import {
   type ItemNotaPaga,
 } from '../hooks/useRelatorios';
 import { useEmpresa } from '../hooks/useEmpresa';
+import { useNfs } from '../hooks/useNfs';
 import { useOrdenacao } from '../hooks/useOrdenacao';
 import { usePeriodo } from '../contexts/PeriodoContext';
 import { brl, brl4, formatarData, kg as fmtKg } from '../lib/formatters';
@@ -45,13 +47,14 @@ import {
 } from '../lib/relatorioPrecoReal';
 import type { EmpresaRow } from '../types/database';
 
-type Aba = 'impureza' | 'diferenca' | 'aberto' | 'pagas' | 'precoReal';
+type Aba = 'impureza' | 'diferenca' | 'aberto' | 'pagas' | 'porMaterial' | 'precoReal';
 
 const ABAS: { key: Aba; label: string; icon: LucideIcon }[] = [
   { key: 'impureza', label: 'Impureza por material', icon: Layers },
   { key: 'diferenca', label: 'Diferença de peso', icon: Scale },
   { key: 'aberto', label: 'Notas em aberto', icon: Clock },
   { key: 'pagas', label: 'Notas pagas', icon: CheckCircle2 },
+  { key: 'porMaterial', label: 'Por material', icon: Boxes },
   { key: 'precoReal', label: 'Preço real', icon: Coins },
 ];
 
@@ -144,6 +147,15 @@ export default function Relatorios() {
       )}
       {aba === 'pagas' && (
         <ViewPagas
+          sort={sort}
+          empresaIncompleta={empresaIncompleta}
+          onErroImpressao={(m) => toast.error(m)}
+          empresa={empresa.data ?? null}
+          periodoLabel={formatarPeriodo()}
+        />
+      )}
+      {aba === 'porMaterial' && (
+        <ViewPorMaterial
           sort={sort}
           empresaIncompleta={empresaIncompleta}
           onErroImpressao={(m) => toast.error(m)}
@@ -823,6 +835,116 @@ function ViewAberto({ sort, empresaIncompleta, onErroImpressao, empresa, periodo
         emptyDescricao="Todos os recebimentos estão em dia."
         emptyIcon={<Clock size={28} />}
         minWidth={1100}
+      />
+    </ViewContainer>
+  );
+}
+
+// ─── Aba: Por material (peso emitido + qtd NFs agrupado por material) ─
+
+interface ItemPorMaterial {
+  material: string;
+  qtdNfs: number;
+  pesoTotal: number;
+}
+
+function ViewPorMaterial({ sort, empresaIncompleta, onErroImpressao, empresa, periodoLabel }: ViewProps) {
+  const dados = useNfs();
+
+  const itens: ItemPorMaterial[] = useMemo(() => {
+    const nfs = (dados.data ?? []).filter((nf) => nf.substituida_em === null);
+    const map = new Map<string, { qtdNfs: number; pesoTotal: number }>();
+    for (const nf of nfs) {
+      const key = nf.material ?? '—';
+      const atual = map.get(key) ?? { qtdNfs: 0, pesoTotal: 0 };
+      atual.qtdNfs += 1;
+      atual.pesoTotal += Number(nf.peso) || 0;
+      map.set(key, atual);
+    }
+    return Array.from(map.entries())
+      .map(([material, d]) => ({ material, ...d }))
+      .sort((a, b) => b.pesoTotal - a.pesoTotal);
+  }, [dados.data]);
+
+  const metricas: MetricaSlim[] = useMemo(() => {
+    const totalPeso = itens.reduce((s, i) => s + i.pesoTotal, 0);
+    const totalNfs = itens.reduce((s, i) => s + i.qtdNfs, 0);
+    return [
+      { label: 'Qtd materiais', valor: itens.length },
+      { label: 'Peso total', valor: fmtKg(totalPeso), tom: 'accent' },
+      { label: 'Total de NFs', valor: totalNfs },
+    ];
+  }, [itens]);
+
+  const colunas: ColunaRelatorio<ItemPorMaterial>[] = [
+    {
+      key: 'material',
+      label: 'Material',
+      ordenavel: true,
+      extrair: (i) => i.material,
+      render: (i) => <span className="text-text">{i.material}</span>,
+      printValue: (i) => i.material,
+      total: () => 'Total',
+    },
+    {
+      key: 'qtd_nfs',
+      label: 'Qtd NFs',
+      ordenavel: true,
+      align: 'right',
+      extrair: (i) => i.qtdNfs,
+      render: (i) => <span className="font-mono-num text-text-2">{i.qtdNfs}</span>,
+      printValue: (i) => String(i.qtdNfs),
+      total: (arr) => String(arr.reduce((s, i) => s + i.qtdNfs, 0)),
+      printTotal: (arr) => String(arr.reduce((s, i) => s + i.qtdNfs, 0)),
+    },
+    {
+      key: 'peso_total',
+      label: 'Peso total',
+      ordenavel: true,
+      align: 'right',
+      extrair: (i) => i.pesoTotal,
+      render: (i) => <span className="font-medium text-text">{fmtKg(i.pesoTotal)}</span>,
+      printValue: (i) => fmtKg(i.pesoTotal),
+      total: (arr) => fmtKg(arr.reduce((s, i) => s + i.pesoTotal, 0)),
+      printTotal: (arr) => fmtKg(arr.reduce((s, i) => s + i.pesoTotal, 0)),
+    },
+  ];
+
+  function imprimir() {
+    const r = montarImpressao({
+      titulo: 'Relatório de peso por material',
+      itens,
+      colunas,
+      metricas,
+      empresa,
+      empresaIncompleta,
+      periodoLabel,
+    });
+    if (!r.ok) onErroImpressao(r.motivo ?? 'Erro');
+  }
+
+  return (
+    <ViewContainer
+      cabecalho={{
+        icon: Boxes,
+        titulo: 'Por material',
+        descricao: 'Peso total e quantidade de NFs emitidas por material no período.',
+        onImprimir: imprimir,
+        empresaIncompleta,
+      }}
+      metricas={metricas}
+    >
+      <TabelaRelatorio
+        itens={itens}
+        colunas={colunas}
+        estado={sort.estado}
+        onToggle={sort.toggle}
+        isLoading={dados.isLoading}
+        rowKey={(i) => i.material}
+        emptyTitulo="Nenhuma NF no período"
+        emptyDescricao="Emita NFs ou ajuste o filtro de período pra ver agregação por material."
+        emptyIcon={<Boxes size={28} />}
+        minWidth={500}
       />
     </ViewContainer>
   );
