@@ -173,6 +173,25 @@ function pctStr(n: number, signed = false): string {
   })}%`;
 }
 
+function precoKgStr(v: number | string | null | undefined): string {
+  if (v === null || v === undefined || v === '') return '—';
+  const n = typeof v === 'string' ? Number(v) : v;
+  if (!Number.isFinite(n) || n <= 0) return '—';
+  return `${brl4(n)}/kg`;
+}
+
+function precoKgMedioPond(itens: { peso: number; precoKg: number }[]): number {
+  let somaPondPeso = 0;
+  let somaPeso = 0;
+  for (const i of itens) {
+    if (!Number.isFinite(i.precoKg) || i.precoKg <= 0) continue;
+    if (!Number.isFinite(i.peso) || i.peso <= 0) continue;
+    somaPondPeso += i.precoKg * i.peso;
+    somaPeso += i.peso;
+  }
+  return somaPeso > 0 ? somaPondPeso / somaPeso : 0;
+}
+
 // ─── Aba: Impureza ─────────────────────────────────────────────────────
 
 function ViewImpureza({ sort, empresaIncompleta, onErroImpressao, empresa, periodoLabel }: ViewProps) {
@@ -465,10 +484,17 @@ function ViewPagas({ sort, empresaIncompleta, onErroImpressao, empresa, periodoL
   const metricas: MetricaSlim[] = useMemo(() => {
     const totalValor = itens.reduce((s, i) => s + i.valorPago, 0);
     const totalPeso = itens.reduce((s, i) => s + Number(i.nf.peso), 0);
+    const precoMedio = precoKgMedioPond(
+      itens.map((i) => ({
+        peso: Number(i.nf.peso) || 0,
+        precoKg: Number(i.nf.preco_negociado) || 0,
+      })),
+    );
     return [
       { label: 'NFs pagas', valor: itens.length, tom: 'accent' },
       { label: 'Peso total', valor: fmtKg(totalPeso) },
       { label: 'Valor pago total', valor: brl(totalValor), tom: 'accent' },
+      { label: 'R$/kg médio', valor: precoKgStr(precoMedio), tom: 'accent' },
     ];
   }, [itens]);
 
@@ -525,6 +551,35 @@ function ViewPagas({ sort, empresaIncompleta, onErroImpressao, empresa, periodoL
       printValue: (i) => fmtKg(i.nf.peso),
       total: (arr) => fmtKg(arr.reduce((s, i) => s + Number(i.nf.peso), 0)),
       printTotal: (arr) => fmtKg(arr.reduce((s, i) => s + Number(i.nf.peso), 0)),
+    },
+    {
+      key: 'preco_kg',
+      label: 'R$/kg',
+      ordenavel: true,
+      align: 'right',
+      extrair: (i) => Number(i.nf.preco_negociado) || 0,
+      render: (i) => (
+        <span className="font-medium text-accent">{precoKgStr(i.nf.preco_negociado)}</span>
+      ),
+      printValue: (i) => precoKgStr(i.nf.preco_negociado),
+      total: (arr) =>
+        precoKgStr(
+          precoKgMedioPond(
+            arr.map((i) => ({
+              peso: Number(i.nf.peso) || 0,
+              precoKg: Number(i.nf.preco_negociado) || 0,
+            })),
+          ),
+        ),
+      printTotal: (arr) =>
+        precoKgStr(
+          precoKgMedioPond(
+            arr.map((i) => ({
+              peso: Number(i.nf.peso) || 0,
+              precoKg: Number(i.nf.preco_negociado) || 0,
+            })),
+          ),
+        ),
     },
     {
       key: 'valor_pago',
@@ -585,7 +640,7 @@ function ViewPagas({ sort, empresaIncompleta, onErroImpressao, empresa, periodoL
         emptyTitulo="Nenhuma NF paga neste período"
         emptyDescricao="Quando recebimentos forem marcados como pagos, aparecem aqui."
         emptyIcon={<CheckCircle2 size={28} />}
-        minWidth={1100}
+        minWidth={1200}
       />
     </ViewContainer>
   );
@@ -601,10 +656,17 @@ function ViewAberto({ sort, empresaIncompleta, onErroImpressao, empresa, periodo
     const totVal = itens.reduce((s, i) => s + Number(i.nf.valor_final), 0);
     const totPeso = itens.reduce((s, i) => s + Number(i.nf.peso), 0);
     const maisAntigo = itens.length > 0 ? Math.max(...itens.map((i) => i.diasEmAberto)) : 0;
+    const precoMedio = precoKgMedioPond(
+      itens.map((i) => ({
+        peso: Number(i.nf.peso) || 0,
+        precoKg: Number(i.nf.preco_negociado) || 0,
+      })),
+    );
     return [
       { label: 'NFs em aberto', valor: itens.length },
       { label: 'Peso total', valor: fmtKg(totPeso) },
       { label: 'Valor total', valor: brl(totVal), tom: 'accent' },
+      { label: 'R$/kg médio', valor: precoKgStr(precoMedio), tom: 'accent' },
       { label: 'Mais antiga', valor: `${maisAntigo}d`, tom: maisAntigo > 30 ? 'warn' : 'default' },
     ];
   }, [itens]);
@@ -672,6 +734,35 @@ function ViewAberto({ sort, empresaIncompleta, onErroImpressao, empresa, periodo
       printTotal: (arr) => fmtKg(arr.reduce((s, i) => s + Number(i.nf.peso), 0)),
     },
     {
+      key: 'preco_kg',
+      label: 'R$/kg',
+      ordenavel: true,
+      align: 'right',
+      extrair: (i) => Number(i.nf.preco_negociado) || 0,
+      render: (i) => (
+        <span className="font-medium text-accent">{precoKgStr(i.nf.preco_negociado)}</span>
+      ),
+      printValue: (i) => precoKgStr(i.nf.preco_negociado),
+      total: (arr) =>
+        precoKgStr(
+          precoKgMedioPond(
+            arr.map((i) => ({
+              peso: Number(i.nf.peso) || 0,
+              precoKg: Number(i.nf.preco_negociado) || 0,
+            })),
+          ),
+        ),
+      printTotal: (arr) =>
+        precoKgStr(
+          precoKgMedioPond(
+            arr.map((i) => ({
+              peso: Number(i.nf.peso) || 0,
+              precoKg: Number(i.nf.preco_negociado) || 0,
+            })),
+          ),
+        ),
+    },
+    {
       key: 'valor',
       label: 'Valor',
       ordenavel: true,
@@ -731,7 +822,7 @@ function ViewAberto({ sort, empresaIncompleta, onErroImpressao, empresa, periodo
         emptyTitulo="Nenhuma nota em aberto"
         emptyDescricao="Todos os recebimentos estão em dia."
         emptyIcon={<Clock size={28} />}
-        minWidth={1000}
+        minWidth={1100}
       />
     </ViewContainer>
   );
