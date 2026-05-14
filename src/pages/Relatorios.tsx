@@ -3,6 +3,7 @@ import {
   AlertCircle,
   Boxes,
   CheckCircle2,
+  ChevronDown,
   Clock,
   Coins,
   GitBranch,
@@ -24,16 +25,18 @@ import {
   type ColunaRelatorio,
 } from '../components/relatorios/TabelaRelatorio';
 import {
-  useRelatorioComplementares,
+  useConferenciaComplementares,
   useRelatorioDiferencaPeso,
   useRelatorioEmAberto,
   useRelatorioImpureza,
   useRelatorioNotasPagas,
   useRelatorioPrecoReal,
+  type ItemConferencia,
   type ItemDiferencaPeso,
   type ItemEmAberto,
   type ItemImpureza,
   type ItemNotaPaga,
+  type StatusConferencia,
 } from '../hooks/useRelatorios';
 import { useEmpresa } from '../hooks/useEmpresa';
 import { useNfs } from '../hooks/useNfs';
@@ -1329,31 +1332,60 @@ function ViewPrecoReal({
   );
 }
 
-// ─── Aba: NFs Complementares ───────────────────────────────────────────
+// ─── Aba: NFs Complementares (Conferência fiscal) ──────────────────────
+
+type FiltroStatus = 'TODOS' | StatusConferencia;
+
+const STATUS_INFO: Record<
+  StatusConferencia,
+  { label: string; emoji: string; borda: string; bg: string; text: string }
+> = {
+  CONFERIDO: {
+    label: 'CONFERIDO',
+    emoji: '🟢',
+    borda: 'border-green-500/30',
+    bg: 'bg-green-500/10',
+    text: 'text-green-400',
+  },
+  ATENCAO: {
+    label: 'ATENÇÃO',
+    emoji: '🟡',
+    borda: 'border-yellow-500/40',
+    bg: 'bg-yellow-500/10',
+    text: 'text-yellow-300',
+  },
+  DIVERGENTE: {
+    label: 'DIVERGENTE',
+    emoji: '🔴',
+    borda: 'border-red-500/40',
+    bg: 'bg-red-500/10',
+    text: 'text-red-400',
+  },
+  AGUARDANDO: {
+    label: 'AGUARDANDO',
+    emoji: '⏰',
+    borda: 'border-border-soft',
+    bg: 'bg-surface-2',
+    text: 'text-text-2',
+  },
+};
 
 function ViewComplementares() {
-  const dados = useRelatorioComplementares();
-  const grupos = dados.data ?? [];
+  const [cardExpandido, setCardExpandido] = useState<string | null>(null);
+  const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('TODOS');
 
-  const resumo = useMemo(() => {
-    const totalGrupos = grupos.length;
-    const totalCompl = grupos.reduce((s, g) => s + g.qtdComplementares, 0);
-    const valorTotalCompl = grupos.reduce((s, g) => s + g.valorComplementares, 0);
-    const valorTotalOperacoes = grupos.reduce((s, g) => s + g.totalOperacao, 0);
+  const dados = useConferenciaComplementares();
+  const itens = dados.data?.itens ?? [];
+  const resumo = dados.data?.resumo;
 
-    const porMotivo = grupos.reduce<Record<string, { valor: number; qtd: number }>>((acc, g) => {
-      g.complementares.forEach((c) => {
-        const motivo = c.motivo_complementar ?? 'OUTRO';
-        const atual = acc[motivo] ?? { valor: 0, qtd: 0 };
-        atual.valor += Number(c.valor_final) || 0;
-        atual.qtd += 1;
-        acc[motivo] = atual;
-      });
-      return acc;
-    }, {});
+  const itensFiltrados = useMemo(() => {
+    if (filtroStatus === 'TODOS') return itens;
+    return itens.filter((i) => i.status === filtroStatus);
+  }, [itens, filtroStatus]);
 
-    return { totalGrupos, totalCompl, valorTotalCompl, valorTotalOperacoes, porMotivo };
-  }, [grupos]);
+  function toggleFiltro(s: StatusConferencia) {
+    setFiltroStatus((atual) => (atual === s ? 'TODOS' : s));
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -1363,151 +1395,389 @@ function ViewComplementares() {
             <GitBranch size={18} />
           </div>
           <div>
-            <h2 className="font-serif-display text-2xl">NFs Complementares</h2>
+            <h2 className="font-serif-display text-2xl">NFs Complementares — Conferência</h2>
             <p className="text-sm text-text-2 mt-0.5">
-              Conferência de NFs principais com suas complementares vinculadas no período.
+              Confronto da NF principal com soma de (recebimento pago + complementares emitidas).
+              Tolerância: R$ 1 (conferido) · R$ 50 (atenção).
             </p>
           </div>
         </div>
       </Card>
 
-      {dados.isLoading ? (
-        <Card className="p-12 text-center text-text-2 text-sm">Carregando complementares...</Card>
+      {dados.isLoading || !resumo ? (
+        <Card className="p-12 text-center text-text-2 text-sm">Carregando conferência...</Card>
       ) : (
         <>
+          {/* Cards de status (clicáveis) */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Card className="p-4">
-              <p className="text-[11px] text-text-3 uppercase tracking-[0.12em]">Operações</p>
-              <p className="text-3xl font-medium font-mono-num mt-2 text-text">
-                {resumo.totalGrupos}
-              </p>
-            </Card>
-            <Card className="p-4">
-              <p className="text-[11px] text-text-3 uppercase tracking-[0.12em]">Complementares</p>
-              <p className="text-3xl font-medium font-mono-num mt-2 text-text">
-                {resumo.totalCompl}
-              </p>
-            </Card>
-            <Card className="p-4 bg-purple-500/10 border-purple-500/30">
-              <p className="text-[11px] text-purple-300 uppercase tracking-[0.12em]">
-                Valor das compl.
-              </p>
-              <p className="text-2xl font-medium font-mono-num mt-2 text-purple-300">
-                {brl(resumo.valorTotalCompl)}
-              </p>
-            </Card>
-            <Card className="p-4 bg-accent-soft-bg border-accent-soft-border">
-              <p className="text-[11px] text-accent uppercase tracking-[0.12em]">
-                Total das operações
-              </p>
-              <p className="text-2xl font-medium font-mono-num mt-2 text-accent">
-                {brl(resumo.valorTotalOperacoes)}
-              </p>
-            </Card>
+            <StatusCard
+              status="CONFERIDO"
+              qtd={resumo.conferidos}
+              ativo={filtroStatus === 'CONFERIDO'}
+              onClick={() => toggleFiltro('CONFERIDO')}
+            />
+            <StatusCard
+              status="ATENCAO"
+              qtd={resumo.atencao}
+              ativo={filtroStatus === 'ATENCAO'}
+              onClick={() => toggleFiltro('ATENCAO')}
+            />
+            <StatusCard
+              status="DIVERGENTE"
+              qtd={resumo.divergentes}
+              ativo={filtroStatus === 'DIVERGENTE'}
+              onClick={() => toggleFiltro('DIVERGENTE')}
+            />
+            <StatusCard
+              status="AGUARDANDO"
+              qtd={resumo.aguardando}
+              ativo={filtroStatus === 'AGUARDANDO'}
+              onClick={() => toggleFiltro('AGUARDANDO')}
+            />
           </div>
 
-          {Object.keys(resumo.porMotivo).length > 0 && (
-            <Card className="p-5">
-              <h3 className="text-xs uppercase tracking-[0.12em] text-text-3 mb-3">Por motivo</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {Object.entries(resumo.porMotivo).map(([motivo, dados]) => (
-                  <div
-                    key={motivo}
-                    className="bg-surface-2 border border-border-soft rounded-lg p-3"
-                  >
-                    <p className="text-xs text-text-3 uppercase tracking-[0.08em]">{motivo}</p>
-                    <p className="font-medium font-mono-num text-lg mt-1 text-text">
-                      {brl(dados.valor)}
-                    </p>
-                    <p className="text-[11px] text-text-3 mt-0.5">
-                      {dados.qtd} {dados.qtd === 1 ? 'NF' : 'NFs'}
-                    </p>
-                  </div>
-                ))}
+          {/* Resumo financeiro */}
+          <Card className="p-5">
+            <h3 className="text-xs uppercase tracking-[0.12em] text-text-3 mb-3">
+              Resumo financeiro do período
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <p className="text-[11px] text-text-3 uppercase tracking-[0.08em]">Valor NFs</p>
+                <p className="font-mono-num text-lg mt-1 text-text">{brl(resumo.valorNfs)}</p>
               </div>
-            </Card>
+              <div>
+                <p className="text-[11px] text-text-3 uppercase tracking-[0.08em]">
+                  Recebido (pago)
+                </p>
+                <p className="font-mono-num text-lg mt-1 text-text">{brl(resumo.valorRecebido)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-text-3 uppercase tracking-[0.08em]">
+                  Complementares
+                </p>
+                <p className="font-mono-num text-lg mt-1 text-purple-300">
+                  {brl(resumo.valorComplementares)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] text-text-3 uppercase tracking-[0.08em]">
+                  Diferença total
+                </p>
+                <p
+                  className={`font-mono-num text-lg mt-1 ${
+                    Math.abs(resumo.diferencaTotal) <= 1
+                      ? 'text-green-400'
+                      : Math.abs(resumo.diferencaTotal) <= 50
+                        ? 'text-yellow-300'
+                        : 'text-red-400'
+                  }`}
+                >
+                  {resumo.diferencaTotal >= 0 ? '+' : ''}
+                  {brl(resumo.diferencaTotal)}
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          {/* Botão pra limpar filtro */}
+          {filtroStatus !== 'TODOS' && (
+            <button
+              type="button"
+              onClick={() => setFiltroStatus('TODOS')}
+              className="self-start text-sm text-accent hover:underline inline-flex items-center gap-1"
+            >
+              ← Mostrar todos ({itens.length})
+            </button>
           )}
 
-          {grupos.length === 0 ? (
+          {/* Lista */}
+          {itensFiltrados.length === 0 ? (
             <Card className="p-12 text-center">
               <GitBranch size={28} className="mx-auto text-text-3 mb-3" />
-              <p className="text-text">Nenhuma operação com NF complementar neste período</p>
-              <p className="text-text-2 text-sm mt-1">
-                Quando uma NF receber complementar, vai aparecer aqui.
+              <p className="text-text">
+                {filtroStatus === 'TODOS'
+                  ? 'Nenhuma NF principal neste período'
+                  : `Nenhuma NF com status "${STATUS_INFO[filtroStatus].label}"`}
               </p>
             </Card>
           ) : (
-            grupos.map((grupo) => (
-              <Card key={grupo.pai.id} className="p-0 overflow-hidden">
-                {/* NF PRINCIPAL */}
-                <div className="bg-surface-2 p-5 border-b border-border-soft">
-                  <div className="flex items-start justify-between gap-4 flex-wrap">
-                    <div className="flex-1 min-w-[200px]">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span className="text-[11px] uppercase tracking-[0.12em] text-text-3">
-                          NF Principal
-                        </span>
-                        <span className="font-serif-display text-2xl font-mono-num text-text">
-                          NF {grupo.pai.numero}
-                        </span>
-                      </div>
-                      <p className="text-sm text-text-2">
-                        {formatarData(grupo.pai.data)} · {grupo.pai.cliente_nome}
-                        {grupo.pai.material ? ` · ${grupo.pai.material}` : ''}
-                      </p>
-                      <p className="text-xs text-text-3 font-mono-num mt-1">
-                        Peso: {fmtKg(grupo.pai.peso)}
-                      </p>
-                    </div>
-                    <p className="font-serif-display text-2xl font-mono-num text-accent whitespace-nowrap">
-                      {brl(grupo.pai.valor_final)}
-                    </p>
-                  </div>
-                </div>
-
-                {/* COMPLEMENTARES */}
-                <div className="p-5 flex flex-col gap-2">
-                  <p className="text-[11px] uppercase tracking-[0.12em] text-purple-300 font-semibold mb-1 flex items-center gap-1.5">
-                    <GitBranch size={12} />
-                    {grupo.qtdComplementares}{' '}
-                    {grupo.qtdComplementares === 1 ? 'Complementar' : 'Complementares'}
-                  </p>
-                  {grupo.complementares.map((c) => (
-                    <div
-                      key={c.id}
-                      className="flex items-start justify-between gap-3 bg-purple-500/5 border border-purple-500/20 rounded-lg p-3 flex-wrap"
-                    >
-                      <div className="flex-1 min-w-[180px]">
-                        <p className="font-medium font-mono-num text-text">NF {c.numero}</p>
-                        <p className="text-xs text-text-3 mt-0.5">
-                          {formatarData(c.data)} · Motivo:{' '}
-                          <span className="text-purple-300 font-medium">
-                            {c.motivo_complementar ?? '—'}
-                          </span>
-                          {Number(c.peso) > 0 ? ` · ${fmtKg(c.peso)}` : ''}
-                        </p>
-                      </div>
-                      <p className="text-lg font-medium font-mono-num text-purple-300 whitespace-nowrap">
-                        {brl(c.valor_final)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-
-                {/* TOTAL DA OPERAÇÃO */}
-                <div className="bg-accent-soft-bg border-t border-accent-soft-border px-5 py-3 flex justify-between items-center flex-wrap gap-2">
-                  <span className="text-xs uppercase tracking-[0.12em] text-accent font-semibold">
-                    Total da operação
-                  </span>
-                  <span className="font-serif-display text-2xl font-mono-num text-accent">
-                    {brl(grupo.totalOperacao)}
-                  </span>
-                </div>
-              </Card>
+            itensFiltrados.map((item) => (
+              <CardConferencia
+                key={item.nf.id}
+                item={item}
+                expandido={cardExpandido === item.nf.id}
+                onToggle={() =>
+                  setCardExpandido((atual) => (atual === item.nf.id ? null : item.nf.id))
+                }
+              />
             ))
           )}
         </>
       )}
+    </div>
+  );
+}
+
+function StatusCard({
+  status,
+  qtd,
+  ativo,
+  onClick,
+}: {
+  status: StatusConferencia;
+  qtd: number;
+  ativo: boolean;
+  onClick: () => void;
+}) {
+  const info = STATUS_INFO[status];
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`text-left p-4 rounded-2xl border transition ${info.bg} ${info.borda} ${
+        ativo ? 'ring-2 ring-accent' : 'hover:brightness-125'
+      }`}
+    >
+      <p className={`text-[11px] uppercase tracking-[0.08em] ${info.text}`}>
+        {info.emoji} {info.label}
+      </p>
+      <p className={`text-3xl font-medium font-mono-num mt-2 ${info.text}`}>{qtd}</p>
+    </button>
+  );
+}
+
+function CardConferencia({
+  item,
+  expandido,
+  onToggle,
+}: {
+  item: ItemConferencia;
+  expandido: boolean;
+  onToggle: () => void;
+}) {
+  const info = STATUS_INFO[item.status];
+  const qtdCompl = item.complementares.length;
+  const aguardando = item.status === 'AGUARDANDO';
+
+  return (
+    <Card className={`p-0 overflow-hidden border ${info.borda}`}>
+      {/* Header (sempre visível) */}
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full text-left p-5 hover:bg-surface-2 transition"
+      >
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex-1 min-w-[240px]">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <span className="font-serif-display text-xl font-mono-num text-text">
+                NF {item.nf.numero}
+              </span>
+              <span
+                className={`inline-block px-2 py-0.5 rounded-full text-[10px] uppercase tracking-[0.08em] font-semibold border ${info.bg} ${info.borda} ${info.text}`}
+              >
+                {info.emoji} {info.label}
+              </span>
+              {qtdCompl > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-[0.06em] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                  <GitBranch size={10} />
+                  {qtdCompl} compl.
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-text-2">
+              {formatarData(item.nf.data)} · {item.nf.cliente_nome}
+              {item.nf.material ? ` · ${item.nf.material}` : ''}
+            </p>
+            <p className="text-xs text-text-3 font-mono-num mt-0.5">
+              Peso: {fmtKg(item.nf.peso)}
+            </p>
+          </div>
+          <div className="flex items-start gap-3">
+            <div className="text-right">
+              <p className="text-[11px] text-text-3 uppercase tracking-[0.08em]">Valor NF</p>
+              <p className="font-serif-display text-2xl font-mono-num text-text whitespace-nowrap">
+                {brl(item.nf.valor_final)}
+              </p>
+              {!aguardando && (
+                <p className={`text-xs font-mono-num mt-0.5 ${info.text}`}>
+                  Δ {item.diferenca >= 0 ? '+' : ''}
+                  {brl(item.diferenca)}
+                </p>
+              )}
+              {aguardando && <p className="text-xs text-text-3 mt-0.5">Δ —</p>}
+            </div>
+            <ChevronDown
+              size={20}
+              className={`text-text-3 transition mt-1 flex-shrink-0 ${expandido ? 'rotate-180' : ''}`}
+            />
+          </div>
+        </div>
+      </button>
+
+      {/* Expandido */}
+      {expandido && (
+        <div className="border-t border-border-soft p-5 flex flex-col gap-3 bg-surface-2/40">
+          {/* Valor NF */}
+          <LinhaConferencia
+            icone="📋"
+            label="Valor da NF Principal"
+            valor={brl(item.nf.valor_final)}
+            tom="neutro"
+          />
+
+          {/* Recebimento */}
+          {item.recebimentoPago > 0 ? (
+            <LinhaConferencia
+              icone="💰"
+              label="Recebimento conferido"
+              valor={brl(item.recebimentoPago)}
+              tom="positivo"
+              detalhe={
+                item.recebimentos.length > 0
+                  ? item.recebimentos
+                      .map((r) => {
+                        const d = r.data_pagamento ?? r.pago_em;
+                        return d ? formatarData(d) : null;
+                      })
+                      .filter(Boolean)
+                      .join(' · ') || undefined
+                  : undefined
+              }
+            />
+          ) : (
+            <LinhaConferencia
+              icone="💰"
+              label="Recebimento conferido"
+              valor="—"
+              tom="neutro"
+              detalhe="Sem recebimento pago"
+            />
+          )}
+
+          {/* Complementares */}
+          {qtdCompl > 0 ? (
+            <div className="flex flex-col gap-2">
+              <LinhaConferencia
+                icone="↗"
+                label={`Complementares emitidas (${qtdCompl})`}
+                valor={brl(item.totalComplementares)}
+                tom="roxo"
+              />
+              <div className="ml-7 flex flex-col gap-1.5">
+                {item.complementares.map((c) => (
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between gap-3 bg-purple-500/5 border border-purple-500/20 rounded-lg px-3 py-2 text-sm flex-wrap"
+                  >
+                    <div className="flex-1 min-w-[160px]">
+                      <span className="font-medium font-mono-num text-text">NF {c.numero}</span>
+                      <span className="text-text-3 text-xs ml-2">
+                        {formatarData(c.data)} · Motivo:{' '}
+                        <span className="text-purple-300 font-medium">
+                          {c.motivo_complementar ?? '—'}
+                        </span>
+                      </span>
+                    </div>
+                    <span className="font-mono-num text-purple-300 whitespace-nowrap">
+                      {brl(c.valor_final)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <LinhaConferencia
+              icone="↗"
+              label="Complementares emitidas"
+              valor="—"
+              tom="neutro"
+              detalhe="Sem complementares"
+            />
+          )}
+
+          {/* Divisor */}
+          <div className="border-t border-border-soft my-1" />
+
+          {/* Total confrontado */}
+          <LinhaConferencia
+            icone="📊"
+            label="Total Recebido + Compl."
+            valor={brl(item.totalConfrontado)}
+            tom="neutro"
+            destaque
+          />
+
+          {/* Diferença */}
+          {aguardando ? (
+            <div
+              className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 ${info.bg} ${info.borda}`}
+            >
+              <span className={`text-sm font-semibold uppercase tracking-[0.06em] ${info.text}`}>
+                {info.emoji} {info.label}
+              </span>
+              <span className={`text-sm ${info.text}`}>Aguardando recebimento</span>
+            </div>
+          ) : (
+            <div
+              className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 ${info.bg} ${info.borda} flex-wrap`}
+            >
+              <div className="flex flex-col">
+                <span className={`text-sm font-semibold uppercase tracking-[0.06em] ${info.text}`}>
+                  {info.emoji} DIFERENÇA
+                </span>
+                <span className="text-xs text-text-3 mt-0.5">
+                  {item.diferenca > 0
+                    ? 'Recebeu/complementou a mais que a NF'
+                    : item.diferenca < 0
+                      ? 'Falta receber/complementar'
+                      : 'Bate exatamente'}
+                </span>
+              </div>
+              <span className={`font-serif-display text-2xl font-mono-num ${info.text}`}>
+                {item.diferenca >= 0 ? '+' : ''}
+                {brl(item.diferenca)}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function LinhaConferencia({
+  icone,
+  label,
+  valor,
+  detalhe,
+  tom,
+  destaque,
+}: {
+  icone: string;
+  label: string;
+  valor: string;
+  detalhe?: string;
+  tom: 'neutro' | 'positivo' | 'roxo';
+  destaque?: boolean;
+}) {
+  const corValor =
+    tom === 'positivo' ? 'text-green-400' : tom === 'roxo' ? 'text-purple-300' : 'text-text';
+  return (
+    <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex items-center gap-2 text-sm">
+        <span aria-hidden className="w-5 inline-block text-center">
+          {icone}
+        </span>
+        <span className="text-text-2">{label}</span>
+        {detalhe && <span className="text-xs text-text-3">· {detalhe}</span>}
+      </div>
+      <span
+        className={`font-mono-num ${corValor} ${destaque ? 'text-lg font-medium' : 'text-sm'}`}
+      >
+        {valor}
+      </span>
     </div>
   );
 }

@@ -200,38 +200,59 @@ export function useRelatorioEmAberto(): {
   return { data: itens, isLoading: aberto.isLoading };
 }
 
-// ─── NFs Complementares (agrupadas por pai) ────────────────────────────
+// ─── Conferência NFs Principais vs Recebimento + Complementares ──────
 
-export interface ComplementarItem {
+export type StatusConferencia = 'CONFERIDO' | 'ATENCAO' | 'DIVERGENTE' | 'AGUARDANDO';
+
+export const TOLERANCIA_CONFERIDO = 1; // R$ 1,00 — arredondamento de centavos
+export const TOLERANCIA_ATENCAO = 50; // R$ 50,00 — limite pra atenção
+
+export interface NfPrincipalConf {
   id: string;
   numero: string;
   data: string;
   cliente_nome: string;
   material: string | null;
   peso: number;
+  valor_final: number;
+}
+
+export interface RecebimentoConf {
+  id: string;
+  valor_pago: number;
+  data_pagamento: string | null;
+  pago_em: string | null;
+}
+
+export interface ComplementarConf {
+  id: string;
+  numero: string;
+  data: string;
   valor_final: number;
   motivo_complementar: MotivoComplementar | null;
-  nf_pai_id: string;
-  nf_pai_numero: string | null;
 }
 
-export interface PaiItem {
-  id: string;
-  numero: string;
-  data: string;
-  cliente_nome: string;
-  material: string | null;
-  peso: number;
-  valor_final: number;
+export interface ItemConferencia {
+  nf: NfPrincipalConf;
+  recebimentos: RecebimentoConf[];
+  recebimentoPago: number;
+  complementares: ComplementarConf[];
+  totalComplementares: number;
+  totalConfrontado: number;
+  diferenca: number;
+  status: StatusConferencia;
 }
 
-export interface GrupoComplementar {
-  pai: PaiItem;
-  complementares: ComplementarItem[];
-  totalOperacao: number;
-  qtdComplementares: number;
+export interface ResumoConferencia {
+  total: number;
+  conferidos: number;
+  atencao: number;
+  divergentes: number;
+  aguardando: number;
+  valorNfs: number;
+  valorRecebido: number;
   valorComplementares: number;
-  pesoComplementares: number;
+  diferencaTotal: number;
 }
 
 function ultimoDiaDoMes(ano: number, mes: number): string {
@@ -243,71 +264,146 @@ function dataIso(ano: number, mes: number, dia: number): string {
   return `${ano}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
 }
 
-export function useRelatorioComplementares() {
+function classificarStatus(recebimentoPago: number, diferenca: number): StatusConferencia {
+  if (recebimentoPago === 0) return 'AGUARDANDO';
+  const abs = Math.abs(diferenca);
+  if (abs <= TOLERANCIA_CONFERIDO) return 'CONFERIDO';
+  if (abs <= TOLERANCIA_ATENCAO) return 'ATENCAO';
+  return 'DIVERGENTE';
+}
+
+export function useConferenciaComplementares() {
   const { mes, ano } = usePeriodo();
-  return useQuery<GrupoComplementar[]>({
-    queryKey: ['relatorio-complementares', mes, ano],
+  return useQuery<{ itens: ItemConferencia[]; resumo: ResumoConferencia }>({
+    queryKey: ['conferencia-complementares', mes, ano],
     queryFn: async () => {
-      // 1. Busca complementares no período
-      let complQuery = supabase
+      // 1. NFs principais do período (nf_pai_id IS NULL)
+      let q = supabase
         .from('notas_fiscais')
-        .select(
-          'id, numero, data, cliente_nome, material, peso, valor_final, motivo_complementar, nf_pai_id, nf_pai_numero',
-        )
-        .not('nf_pai_id', 'is', null)
+        .select('id, numero, data, cliente_nome, material, peso, valor_final')
+        .is('nf_pai_id', null)
         .order('data', { ascending: false });
 
       if (ano !== null && mes !== null) {
-        complQuery = complQuery
-          .gte('data', dataIso(ano, mes, 1))
-          .lte('data', ultimoDiaDoMes(ano, mes));
+        q = q.gte('data', dataIso(ano, mes, 1)).lte('data', ultimoDiaDoMes(ano, mes));
       } else if (ano !== null) {
-        complQuery = complQuery.gte('data', `${ano}-01-01`).lte('data', `${ano}-12-31`);
+        q = q.gte('data', `${ano}-01-01`).lte('data', `${ano}-12-31`);
       }
 
-      const { data: complementares, error: errCompl } = await complQuery;
-      if (errCompl) throw errCompl;
+      const { data: principais, error } = await q;
+      if (error) throw error;
 
-      const lista = (complementares ?? []) as ComplementarItem[];
-      if (lista.length === 0) return [];
-
-      // 2. Busca NFs pais (podem estar fora do período)
-      const idsPais = Array.from(
-        new Set(lista.map((c) => c.nf_pai_id).filter((id): id is string => Boolean(id))),
-      );
-
-      const { data: pais, error: errPais } = await supabase
-        .from('notas_fiscais')
-        .select('id, numero, data, cliente_nome, material, peso, valor_final')
-        .in('id', idsPais);
-      if (errPais) throw errPais;
-
-      // 3. Agrupa
-      const grupos: GrupoComplementar[] = (pais ?? []).map((pai) => {
-        const filhas = lista.filter((c) => c.nf_pai_id === pai.id);
-        const valorCompl = filhas.reduce((s, f) => s + num(f.valor_final), 0);
-        const pesoCompl = filhas.reduce((s, f) => s + num(f.peso), 0);
+      const lista = (principais ?? []) as NfPrincipalConf[];
+      if (lista.length === 0) {
         return {
-          pai: {
-            id: pai.id,
-            numero: pai.numero,
-            data: pai.data,
-            cliente_nome: pai.cliente_nome,
-            material: pai.material,
-            peso: num(pai.peso),
-            valor_final: num(pai.valor_final),
+          itens: [],
+          resumo: {
+            total: 0,
+            conferidos: 0,
+            atencao: 0,
+            divergentes: 0,
+            aguardando: 0,
+            valorNfs: 0,
+            valorRecebido: 0,
+            valorComplementares: 0,
+            diferencaTotal: 0,
           },
-          complementares: filhas,
-          totalOperacao: num(pai.valor_final) + valorCompl,
-          qtdComplementares: filhas.length,
-          valorComplementares: valorCompl,
-          pesoComplementares: pesoCompl,
+        };
+      }
+
+      const ids = lista.map((p) => p.id);
+
+      // 2. Recebimentos PAGOS das principais
+      const { data: recebimentos, error: errR } = await supabase
+        .from('recebimentos')
+        .select('id, nf_id, valor_pago, data_pagamento, pago_em')
+        .in('nf_id', ids)
+        .eq('pago', true);
+      if (errR) throw errR;
+
+      // 3. Complementares das principais
+      const { data: complementares, error: errC } = await supabase
+        .from('notas_fiscais')
+        .select('id, numero, data, valor_final, motivo_complementar, nf_pai_id')
+        .in('nf_pai_id', ids)
+        .order('data', { ascending: false });
+      if (errC) throw errC;
+
+      const recsByNf = new Map<string, RecebimentoConf[]>();
+      for (const r of recebimentos ?? []) {
+        const arr = recsByNf.get(r.nf_id) ?? [];
+        arr.push({
+          id: r.id,
+          valor_pago: num(r.valor_pago),
+          data_pagamento: r.data_pagamento,
+          pago_em: r.pago_em,
+        });
+        recsByNf.set(r.nf_id, arr);
+      }
+
+      const complByNf = new Map<string, ComplementarConf[]>();
+      for (const c of complementares ?? []) {
+        if (!c.nf_pai_id) continue;
+        const arr = complByNf.get(c.nf_pai_id) ?? [];
+        arr.push({
+          id: c.id,
+          numero: c.numero,
+          data: c.data,
+          valor_final: num(c.valor_final),
+          motivo_complementar: c.motivo_complementar,
+        });
+        complByNf.set(c.nf_pai_id, arr);
+      }
+
+      const itens: ItemConferencia[] = lista.map((p) => {
+        const valorNf = num(p.valor_final);
+        const recs = recsByNf.get(p.id) ?? [];
+        const recebimentoPago = recs.reduce((s, r) => s + r.valor_pago, 0);
+
+        const compls = complByNf.get(p.id) ?? [];
+        const totalComplementares = compls.reduce((s, c) => s + c.valor_final, 0);
+
+        const totalConfrontado = recebimentoPago + totalComplementares;
+        const diferenca = totalConfrontado - valorNf;
+        const status = classificarStatus(recebimentoPago, diferenca);
+
+        return {
+          nf: {
+            id: p.id,
+            numero: p.numero,
+            data: p.data,
+            cliente_nome: p.cliente_nome,
+            material: p.material,
+            peso: num(p.peso),
+            valor_final: valorNf,
+          },
+          recebimentos: recs,
+          recebimentoPago,
+          complementares: compls,
+          totalComplementares,
+          totalConfrontado,
+          diferenca,
+          status,
         };
       });
 
-      return grupos.sort(
-        (a, b) => new Date(b.pai.data).getTime() - new Date(a.pai.data).getTime(),
-      );
+      const resumo: ResumoConferencia = {
+        total: itens.length,
+        conferidos: itens.filter((i) => i.status === 'CONFERIDO').length,
+        atencao: itens.filter((i) => i.status === 'ATENCAO').length,
+        divergentes: itens.filter((i) => i.status === 'DIVERGENTE').length,
+        aguardando: itens.filter((i) => i.status === 'AGUARDANDO').length,
+        valorNfs: itens.reduce((s, i) => s + i.nf.valor_final, 0),
+        valorRecebido: itens.reduce((s, i) => s + i.recebimentoPago, 0),
+        valorComplementares: itens.reduce((s, i) => s + i.totalComplementares, 0),
+        // diferenca total ignora AGUARDANDO (que tem diferenca = -valor_final mas
+        // não foi recebido ainda)
+        diferencaTotal: itens
+          .filter((i) => i.status !== 'AGUARDANDO')
+          .reduce((s, i) => s + i.diferenca, 0),
+      };
+
+      return { itens, resumo };
     },
   });
 }
