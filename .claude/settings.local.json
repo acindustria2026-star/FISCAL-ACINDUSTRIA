@@ -30,7 +30,8 @@
       "Bash(npx vercel *)",
       "Bash(vercel whoami *)",
       "PowerShell(cmdkey /list)",
-      "Bash(git pull *)"
+      "Bash(git pull *)",
+      "Bash(echo \"EXIT=$?\")"
     ]
   }
 }
