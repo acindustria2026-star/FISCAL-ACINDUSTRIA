@@ -57,8 +57,8 @@ const HUMAN_CAMPO: Record<string, string> = {
   pago_em: 'data do pagamento',
   motivo_complementar: 'motivo complementar',
   motivo_substituicao: 'motivo substituição',
-  nf_pai_id: 'NF pai',
-  nf_pai_numero: 'número da NF pai',
+  nf_pai_id: 'NF principal',
+  nf_pai_numero: 'número da NF principal',
   substituida_em: 'substituída em',
 };
 

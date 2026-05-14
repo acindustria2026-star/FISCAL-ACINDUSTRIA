@@ -1365,7 +1365,7 @@ function ViewComplementares() {
           <div>
             <h2 className="font-serif-display text-2xl">NFs Complementares</h2>
             <p className="text-sm text-text-2 mt-0.5">
-              Conferência de NFs pai com suas complementares vinculadas no período.
+              Conferência de NFs principais com suas complementares vinculadas no período.
             </p>
           </div>
         </div>
@@ -1439,13 +1439,13 @@ function ViewComplementares() {
           ) : (
             grupos.map((grupo) => (
               <Card key={grupo.pai.id} className="p-0 overflow-hidden">
-                {/* NF PAI */}
+                {/* NF PRINCIPAL */}
                 <div className="bg-surface-2 p-5 border-b border-border-soft">
                   <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div className="flex-1 min-w-[200px]">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="text-[11px] uppercase tracking-[0.12em] text-text-3">
-                          NF Pai
+                          NF Principal
                         </span>
                         <span className="font-serif-display text-2xl font-mono-num text-text">
                           NF {grupo.pai.numero}
