@@ -277,57 +277,75 @@ export function useConferenciaComplementares() {
   return useQuery<{ itens: ItemConferencia[]; resumo: ResumoConferencia }>({
     queryKey: ['conferencia-complementares', mes, ano],
     queryFn: async () => {
-      // 1. NFs principais do período (nf_pai_id IS NULL)
-      let q = supabase
+      const resumoVazio: ResumoConferencia = {
+        total: 0,
+        conferidos: 0,
+        atencao: 0,
+        divergentes: 0,
+        aguardando: 0,
+        valorNfs: 0,
+        valorRecebido: 0,
+        valorComplementares: 0,
+        diferencaTotal: 0,
+      };
+
+      // 1. Complementares emitidas no período (filtro de período vale aqui).
+      // A NF principal pode ser de qualquer data — vem de Q2 abaixo sem
+      // filtro de período.
+      let complQuery = supabase
         .from('notas_fiscais')
-        .select('id, numero, data, cliente_nome, material, peso, valor_final')
-        .is('nf_pai_id', null)
+        .select('id, numero, data, valor_final, motivo_complementar, nf_pai_id')
+        .not('nf_pai_id', 'is', null)
         .order('data', { ascending: false });
 
       if (ano !== null && mes !== null) {
-        q = q.gte('data', dataIso(ano, mes, 1)).lte('data', ultimoDiaDoMes(ano, mes));
+        complQuery = complQuery
+          .gte('data', dataIso(ano, mes, 1))
+          .lte('data', ultimoDiaDoMes(ano, mes));
       } else if (ano !== null) {
-        q = q.gte('data', `${ano}-01-01`).lte('data', `${ano}-12-31`);
+        complQuery = complQuery.gte('data', `${ano}-01-01`).lte('data', `${ano}-12-31`);
       }
 
-      const { data: principais, error } = await q;
-      if (error) throw error;
+      const { data: complementares, error: errC } = await complQuery;
+      if (errC) throw errC;
+
+      if (!complementares || complementares.length === 0) {
+        return { itens: [], resumo: resumoVazio };
+      }
+
+      // 2. IDs únicos das NFs principais vinculadas
+      const idsPais = Array.from(
+        new Set(
+          complementares
+            .map((c) => c.nf_pai_id)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      );
+
+      if (idsPais.length === 0) {
+        return { itens: [], resumo: resumoVazio };
+      }
+
+      // 3. NFs principais vinculadas (sem filtro de período — onde quer que estejam)
+      const { data: principais, error: errP } = await supabase
+        .from('notas_fiscais')
+        .select('id, numero, data, cliente_nome, material, peso, valor_final')
+        .in('id', idsPais)
+        .order('data', { ascending: false });
+      if (errP) throw errP;
 
       const lista = (principais ?? []) as NfPrincipalConf[];
       if (lista.length === 0) {
-        return {
-          itens: [],
-          resumo: {
-            total: 0,
-            conferidos: 0,
-            atencao: 0,
-            divergentes: 0,
-            aguardando: 0,
-            valorNfs: 0,
-            valorRecebido: 0,
-            valorComplementares: 0,
-            diferencaTotal: 0,
-          },
-        };
+        return { itens: [], resumo: resumoVazio };
       }
 
-      const ids = lista.map((p) => p.id);
-
-      // 2. Recebimentos PAGOS das principais
+      // 4. Recebimentos PAGOS das principais
       const { data: recebimentos, error: errR } = await supabase
         .from('recebimentos')
         .select('id, nf_id, valor_pago, data_pagamento, pago_em')
-        .in('nf_id', ids)
+        .in('nf_id', idsPais)
         .eq('pago', true);
       if (errR) throw errR;
-
-      // 3. Complementares das principais
-      const { data: complementares, error: errC } = await supabase
-        .from('notas_fiscais')
-        .select('id, numero, data, valor_final, motivo_complementar, nf_pai_id')
-        .in('nf_pai_id', ids)
-        .order('data', { ascending: false });
-      if (errC) throw errC;
 
       const recsByNf = new Map<string, RecebimentoConf[]>();
       for (const r of recebimentos ?? []) {
@@ -342,7 +360,7 @@ export function useConferenciaComplementares() {
       }
 
       const complByNf = new Map<string, ComplementarConf[]>();
-      for (const c of complementares ?? []) {
+      for (const c of complementares) {
         if (!c.nf_pai_id) continue;
         const arr = complByNf.get(c.nf_pai_id) ?? [];
         arr.push({

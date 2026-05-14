@@ -1397,8 +1397,12 @@ function ViewComplementares() {
           <div>
             <h2 className="font-serif-display text-2xl">NFs Complementares — Conferência</h2>
             <p className="text-sm text-text-2 mt-0.5">
-              Confronto da NF principal com soma de (recebimento pago + complementares emitidas).
-              Tolerância: R$ 1 (conferido) · R$ 50 (atenção).
+              Apenas operações com NF complementar vinculada · Confronta NF Principal vs
+              Recebimento + Complementares.
+            </p>
+            <p className="text-xs text-text-3 mt-0.5">
+              Tolerâncias: R$ 1 (conferido) · R$ 50 (atenção). Período filtra a data das
+              complementares — a NF principal pode ser de mês anterior.
             </p>
           </div>
         </div>
