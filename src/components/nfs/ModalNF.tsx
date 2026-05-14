@@ -259,6 +259,29 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
 
   async function onSubmit(d: NfFormData) {
     const calcData = nfFormSchema.parse(d);
+
+    // Vínculo de NF complementar: ao EDITAR, preserva o vínculo original
+    // da NF (impede que o salvar acidentalmente transforme uma complementar
+    // em NF principal). Ao CRIAR complementar nova, seta a partir do pai.
+    // Ao SUBSTITUIR ou CRIAR comum, fica null.
+    const vinculoComplementar = (() => {
+      if (contexto.kind === 'editar') {
+        return {
+          nf_pai_id: contexto.nf.nf_pai_id ?? null,
+          nf_pai_numero: contexto.nf.nf_pai_numero ?? null,
+          motivo_complementar: contexto.nf.motivo_complementar ?? null,
+        };
+      }
+      if (contexto.kind === 'complementar' && modoComp === 'nova') {
+        return {
+          nf_pai_id: contexto.pai.id,
+          nf_pai_numero: contexto.pai.numero,
+          motivo_complementar: (calcData.motivo_complementar ?? 'OUTRO') as MotivoComplementar,
+        };
+      }
+      return { nf_pai_id: null, nf_pai_numero: null, motivo_complementar: null };
+    })();
+
     const payload: NfPayload = {
       numero: calcData.numero,
       data: calcData.data,
@@ -279,12 +302,7 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
       pedido_id: calcData.pedido_id ?? null,
       pedido_numero: calcData.pedido_numero ?? null,
       observacoes: calcData.observacoes?.trim() || null,
-      nf_pai_id: contexto.kind === 'complementar' && modoComp === 'nova' ? contexto.pai.id : null,
-      nf_pai_numero: contexto.kind === 'complementar' && modoComp === 'nova' ? contexto.pai.numero : null,
-      motivo_complementar:
-        contexto.kind === 'complementar' && modoComp === 'nova'
-          ? (calcData.motivo_complementar ?? 'OUTRO')
-          : null,
+      ...vinculoComplementar,
     };
 
     try {

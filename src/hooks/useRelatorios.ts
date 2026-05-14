@@ -4,7 +4,7 @@ import { usePeriodo } from '../contexts/PeriodoContext';
 import { useFinanceiro, type ItemFinanceiro } from './useFinanceiro';
 import { useComparativo, type ItemComparativo } from './useComparativo';
 import { useNfsEmAberto } from './useNfsEmAberto';
-import type { NotaFiscalRow } from '../types/database';
+import type { MotivoComplementar, NotaFiscalRow } from '../types/database';
 
 // ─── Impureza ──────────────────────────────────────────────────────────
 
@@ -198,4 +198,116 @@ export function useRelatorioEmAberto(): {
   });
 
   return { data: itens, isLoading: aberto.isLoading };
+}
+
+// ─── NFs Complementares (agrupadas por pai) ────────────────────────────
+
+export interface ComplementarItem {
+  id: string;
+  numero: string;
+  data: string;
+  cliente_nome: string;
+  material: string | null;
+  peso: number;
+  valor_final: number;
+  motivo_complementar: MotivoComplementar | null;
+  nf_pai_id: string;
+  nf_pai_numero: string | null;
+}
+
+export interface PaiItem {
+  id: string;
+  numero: string;
+  data: string;
+  cliente_nome: string;
+  material: string | null;
+  peso: number;
+  valor_final: number;
+}
+
+export interface GrupoComplementar {
+  pai: PaiItem;
+  complementares: ComplementarItem[];
+  totalOperacao: number;
+  qtdComplementares: number;
+  valorComplementares: number;
+  pesoComplementares: number;
+}
+
+function ultimoDiaDoMes(ano: number, mes: number): string {
+  const d = new Date(ano, mes + 1, 0);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function dataIso(ano: number, mes: number, dia: number): string {
+  return `${ano}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+}
+
+export function useRelatorioComplementares() {
+  const { mes, ano } = usePeriodo();
+  return useQuery<GrupoComplementar[]>({
+    queryKey: ['relatorio-complementares', mes, ano],
+    queryFn: async () => {
+      // 1. Busca complementares no período
+      let complQuery = supabase
+        .from('notas_fiscais')
+        .select(
+          'id, numero, data, cliente_nome, material, peso, valor_final, motivo_complementar, nf_pai_id, nf_pai_numero',
+        )
+        .not('nf_pai_id', 'is', null)
+        .order('data', { ascending: false });
+
+      if (ano !== null && mes !== null) {
+        complQuery = complQuery
+          .gte('data', dataIso(ano, mes, 1))
+          .lte('data', ultimoDiaDoMes(ano, mes));
+      } else if (ano !== null) {
+        complQuery = complQuery.gte('data', `${ano}-01-01`).lte('data', `${ano}-12-31`);
+      }
+
+      const { data: complementares, error: errCompl } = await complQuery;
+      if (errCompl) throw errCompl;
+
+      const lista = (complementares ?? []) as ComplementarItem[];
+      if (lista.length === 0) return [];
+
+      // 2. Busca NFs pais (podem estar fora do período)
+      const idsPais = Array.from(
+        new Set(lista.map((c) => c.nf_pai_id).filter((id): id is string => Boolean(id))),
+      );
+
+      const { data: pais, error: errPais } = await supabase
+        .from('notas_fiscais')
+        .select('id, numero, data, cliente_nome, material, peso, valor_final')
+        .in('id', idsPais);
+      if (errPais) throw errPais;
+
+      // 3. Agrupa
+      const grupos: GrupoComplementar[] = (pais ?? []).map((pai) => {
+        const filhas = lista.filter((c) => c.nf_pai_id === pai.id);
+        const valorCompl = filhas.reduce((s, f) => s + num(f.valor_final), 0);
+        const pesoCompl = filhas.reduce((s, f) => s + num(f.peso), 0);
+        return {
+          pai: {
+            id: pai.id,
+            numero: pai.numero,
+            data: pai.data,
+            cliente_nome: pai.cliente_nome,
+            material: pai.material,
+            peso: num(pai.peso),
+            valor_final: num(pai.valor_final),
+          },
+          complementares: filhas,
+          totalOperacao: num(pai.valor_final) + valorCompl,
+          qtdComplementares: filhas.length,
+          valorComplementares: valorCompl,
+          pesoComplementares: pesoCompl,
+        };
+      });
+
+      return grupos.sort(
+        (a, b) => new Date(b.pai.data).getTime() - new Date(a.pai.data).getTime(),
+      );
+    },
+  });
 }

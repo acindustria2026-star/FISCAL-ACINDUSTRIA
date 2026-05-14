@@ -81,9 +81,15 @@ export function TabelaNFs({
                   className="border-b border-border-soft last:border-b-0 hover:bg-surface-2 transition"
                 >
                   <td className="px-3 py-3">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-sm text-text font-mono-num">{nf.numero}</span>
-                      {(ehFilha || foiSubstituida) && (
+                      {ehFilha && (
+                        <BadgeVinculoPai
+                          numeroPai={nf.nf_pai_numero}
+                          onClick={() => onAbrirVinculo(nf)}
+                        />
+                      )}
+                      {foiSubstituida && !ehFilha && (
                         <BadgeCompl onClick={() => onAbrirVinculo(nf)} />
                       )}
                       {filhasCount > 0 && (
@@ -169,6 +175,26 @@ function BadgeCompl({ onClick }: { onClick: () => void }) {
       className="inline-block px-1.5 py-px rounded-full text-[9px] tracking-[0.08em] uppercase font-bold bg-accent-soft-bg text-accent border border-accent-soft-border hover:brightness-125 transition"
     >
       COMPL
+    </button>
+  );
+}
+
+function BadgeVinculoPai({
+  numeroPai,
+  onClick,
+}: {
+  numeroPai: string | null;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Clique pra ver o vínculo"
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-[0.06em] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30 hover:bg-purple-500/25 transition"
+    >
+      <span aria-hidden>↗</span>
+      <span>Compl. de NF {numeroPai ?? '?'}</span>
     </button>
   );
 }

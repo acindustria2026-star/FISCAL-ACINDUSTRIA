@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Clock,
   Coins,
+  GitBranch,
   Layers,
   Scale,
   type LucideIcon,
@@ -23,6 +24,7 @@ import {
   type ColunaRelatorio,
 } from '../components/relatorios/TabelaRelatorio';
 import {
+  useRelatorioComplementares,
   useRelatorioDiferencaPeso,
   useRelatorioEmAberto,
   useRelatorioImpureza,
@@ -47,7 +49,14 @@ import {
 } from '../lib/relatorioPrecoReal';
 import type { EmpresaRow } from '../types/database';
 
-type Aba = 'impureza' | 'diferenca' | 'aberto' | 'pagas' | 'porMaterial' | 'precoReal';
+type Aba =
+  | 'impureza'
+  | 'diferenca'
+  | 'aberto'
+  | 'pagas'
+  | 'porMaterial'
+  | 'precoReal'
+  | 'complementares';
 
 const ABAS: { key: Aba; label: string; icon: LucideIcon }[] = [
   { key: 'impureza', label: 'Impureza por material', icon: Layers },
@@ -56,6 +65,7 @@ const ABAS: { key: Aba; label: string; icon: LucideIcon }[] = [
   { key: 'pagas', label: 'Notas pagas', icon: CheckCircle2 },
   { key: 'porMaterial', label: 'Por material', icon: Boxes },
   { key: 'precoReal', label: 'Preço real', icon: Coins },
+  { key: 'complementares', label: 'NFs Complementares', icon: GitBranch },
 ];
 
 export default function Relatorios() {
@@ -166,6 +176,7 @@ export default function Relatorios() {
       {aba === 'precoReal' && (
         <ViewPrecoReal empresa={empresa.data ?? null} periodoLabel={formatarPeriodo()} />
       )}
+      {aba === 'complementares' && <ViewComplementares />}
     </div>
   );
 }
@@ -1314,6 +1325,189 @@ function ViewPrecoReal({
           </p>
         )}
       </Card>
+    </div>
+  );
+}
+
+// ─── Aba: NFs Complementares ───────────────────────────────────────────
+
+function ViewComplementares() {
+  const dados = useRelatorioComplementares();
+  const grupos = dados.data ?? [];
+
+  const resumo = useMemo(() => {
+    const totalGrupos = grupos.length;
+    const totalCompl = grupos.reduce((s, g) => s + g.qtdComplementares, 0);
+    const valorTotalCompl = grupos.reduce((s, g) => s + g.valorComplementares, 0);
+    const valorTotalOperacoes = grupos.reduce((s, g) => s + g.totalOperacao, 0);
+
+    const porMotivo = grupos.reduce<Record<string, { valor: number; qtd: number }>>((acc, g) => {
+      g.complementares.forEach((c) => {
+        const motivo = c.motivo_complementar ?? 'OUTRO';
+        const atual = acc[motivo] ?? { valor: 0, qtd: 0 };
+        atual.valor += Number(c.valor_final) || 0;
+        atual.qtd += 1;
+        acc[motivo] = atual;
+      });
+      return acc;
+    }, {});
+
+    return { totalGrupos, totalCompl, valorTotalCompl, valorTotalOperacoes, porMotivo };
+  }, [grupos]);
+
+  return (
+    <div className="flex flex-col gap-5">
+      <Card className="p-5">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-300">
+            <GitBranch size={18} />
+          </div>
+          <div>
+            <h2 className="font-serif-display text-2xl">NFs Complementares</h2>
+            <p className="text-sm text-text-2 mt-0.5">
+              Conferência de NFs pai com suas complementares vinculadas no período.
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      {dados.isLoading ? (
+        <Card className="p-12 text-center text-text-2 text-sm">Carregando complementares...</Card>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Card className="p-4">
+              <p className="text-[11px] text-text-3 uppercase tracking-[0.12em]">Operações</p>
+              <p className="text-3xl font-medium font-mono-num mt-2 text-text">
+                {resumo.totalGrupos}
+              </p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-[11px] text-text-3 uppercase tracking-[0.12em]">Complementares</p>
+              <p className="text-3xl font-medium font-mono-num mt-2 text-text">
+                {resumo.totalCompl}
+              </p>
+            </Card>
+            <Card className="p-4 bg-purple-500/10 border-purple-500/30">
+              <p className="text-[11px] text-purple-300 uppercase tracking-[0.12em]">
+                Valor das compl.
+              </p>
+              <p className="text-2xl font-medium font-mono-num mt-2 text-purple-300">
+                {brl(resumo.valorTotalCompl)}
+              </p>
+            </Card>
+            <Card className="p-4 bg-accent-soft-bg border-accent-soft-border">
+              <p className="text-[11px] text-accent uppercase tracking-[0.12em]">
+                Total das operações
+              </p>
+              <p className="text-2xl font-medium font-mono-num mt-2 text-accent">
+                {brl(resumo.valorTotalOperacoes)}
+              </p>
+            </Card>
+          </div>
+
+          {Object.keys(resumo.porMotivo).length > 0 && (
+            <Card className="p-5">
+              <h3 className="text-xs uppercase tracking-[0.12em] text-text-3 mb-3">Por motivo</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {Object.entries(resumo.porMotivo).map(([motivo, dados]) => (
+                  <div
+                    key={motivo}
+                    className="bg-surface-2 border border-border-soft rounded-lg p-3"
+                  >
+                    <p className="text-xs text-text-3 uppercase tracking-[0.08em]">{motivo}</p>
+                    <p className="font-medium font-mono-num text-lg mt-1 text-text">
+                      {brl(dados.valor)}
+                    </p>
+                    <p className="text-[11px] text-text-3 mt-0.5">
+                      {dados.qtd} {dados.qtd === 1 ? 'NF' : 'NFs'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {grupos.length === 0 ? (
+            <Card className="p-12 text-center">
+              <GitBranch size={28} className="mx-auto text-text-3 mb-3" />
+              <p className="text-text">Nenhuma operação com NF complementar neste período</p>
+              <p className="text-text-2 text-sm mt-1">
+                Quando uma NF receber complementar, vai aparecer aqui.
+              </p>
+            </Card>
+          ) : (
+            grupos.map((grupo) => (
+              <Card key={grupo.pai.id} className="p-0 overflow-hidden">
+                {/* NF PAI */}
+                <div className="bg-surface-2 p-5 border-b border-border-soft">
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div className="flex-1 min-w-[200px]">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="text-[11px] uppercase tracking-[0.12em] text-text-3">
+                          NF Pai
+                        </span>
+                        <span className="font-serif-display text-2xl font-mono-num text-text">
+                          NF {grupo.pai.numero}
+                        </span>
+                      </div>
+                      <p className="text-sm text-text-2">
+                        {formatarData(grupo.pai.data)} · {grupo.pai.cliente_nome}
+                        {grupo.pai.material ? ` · ${grupo.pai.material}` : ''}
+                      </p>
+                      <p className="text-xs text-text-3 font-mono-num mt-1">
+                        Peso: {fmtKg(grupo.pai.peso)}
+                      </p>
+                    </div>
+                    <p className="font-serif-display text-2xl font-mono-num text-accent whitespace-nowrap">
+                      {brl(grupo.pai.valor_final)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* COMPLEMENTARES */}
+                <div className="p-5 flex flex-col gap-2">
+                  <p className="text-[11px] uppercase tracking-[0.12em] text-purple-300 font-semibold mb-1 flex items-center gap-1.5">
+                    <GitBranch size={12} />
+                    {grupo.qtdComplementares}{' '}
+                    {grupo.qtdComplementares === 1 ? 'Complementar' : 'Complementares'}
+                  </p>
+                  {grupo.complementares.map((c) => (
+                    <div
+                      key={c.id}
+                      className="flex items-start justify-between gap-3 bg-purple-500/5 border border-purple-500/20 rounded-lg p-3 flex-wrap"
+                    >
+                      <div className="flex-1 min-w-[180px]">
+                        <p className="font-medium font-mono-num text-text">NF {c.numero}</p>
+                        <p className="text-xs text-text-3 mt-0.5">
+                          {formatarData(c.data)} · Motivo:{' '}
+                          <span className="text-purple-300 font-medium">
+                            {c.motivo_complementar ?? '—'}
+                          </span>
+                          {Number(c.peso) > 0 ? ` · ${fmtKg(c.peso)}` : ''}
+                        </p>
+                      </div>
+                      <p className="text-lg font-medium font-mono-num text-purple-300 whitespace-nowrap">
+                        {brl(c.valor_final)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* TOTAL DA OPERAÇÃO */}
+                <div className="bg-accent-soft-bg border-t border-accent-soft-border px-5 py-3 flex justify-between items-center flex-wrap gap-2">
+                  <span className="text-xs uppercase tracking-[0.12em] text-accent font-semibold">
+                    Total da operação
+                  </span>
+                  <span className="font-serif-display text-2xl font-mono-num text-accent">
+                    {brl(grupo.totalOperacao)}
+                  </span>
+                </div>
+              </Card>
+            ))
+          )}
+        </>
+      )}
     </div>
   );
 }
