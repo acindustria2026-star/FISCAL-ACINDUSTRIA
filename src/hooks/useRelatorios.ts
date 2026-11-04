@@ -202,7 +202,7 @@ export function useRelatorioEmAberto(): {
 
 // ─── Conferência NFs Principais vs Recebimento + Complementares ──────
 
-export type StatusConferencia = 'CONFERIDO' | 'ATENCAO' | 'DIVERGENTE' | 'AGUARDANDO';
+export type StatusConferencia = 'CONFERIDO' | 'ATENCAO' | 'DIVERGENTE' | 'AGUARDANDO' | 'RESOLVIDO';
 
 export const TOLERANCIA_CONFERIDO = 1; // R$ 1,00 — arredondamento de centavos
 export const TOLERANCIA_ATENCAO = 50; // R$ 50,00 — limite pra atenção
@@ -215,6 +215,11 @@ export interface NfPrincipalConf {
   material: string | null;
   peso: number;
   valor_final: number;
+  resolvido?: boolean | null;
+  resolvido_motivo?: string | null;
+  resolvido_em?: string | null;
+  resolvido_por?: string | null;
+  resolvido_nf_compl?: string | null;
 }
 
 export interface RecebimentoConf {
@@ -241,6 +246,11 @@ export interface ItemConferencia {
   totalConfrontado: number;
   diferenca: number;
   status: StatusConferencia;
+  resolvido: boolean;
+  resolvido_motivo: string | null;
+  resolvido_em: string | null;
+  resolvido_por: string | null;
+  resolvido_nf_compl: string | null;
 }
 
 export interface ResumoConferencia {
@@ -249,6 +259,7 @@ export interface ResumoConferencia {
   atencao: number;
   divergentes: number;
   aguardando: number;
+  resolvidos: number;
   valorNfs: number;
   valorRecebido: number;
   valorComplementares: number;
@@ -283,6 +294,7 @@ export function useConferenciaComplementares() {
         atencao: 0,
         divergentes: 0,
         aguardando: 0,
+        resolvidos: 0,
         valorNfs: 0,
         valorRecebido: 0,
         valorComplementares: 0,
@@ -329,7 +341,7 @@ export function useConferenciaComplementares() {
       // 3. NFs principais vinculadas (sem filtro de período — onde quer que estejam)
       const { data: principais, error: errP } = await supabase
         .from('notas_fiscais')
-        .select('id, numero, data, cliente_nome, material, peso, valor_final')
+        .select('id, numero, data, cliente_nome, material, peso, valor_final, resolvido, resolvido_motivo, resolvido_em, resolvido_por, resolvido_nf_compl')
         .in('id', idsPais)
         .order('data', { ascending: false });
       if (errP) throw errP;
@@ -383,7 +395,9 @@ export function useConferenciaComplementares() {
 
         const totalConfrontado = recebimentoPago + totalComplementares;
         const diferenca = totalConfrontado - valorNf;
-        const status = classificarStatus(recebimentoPago, diferenca);
+        const status: StatusConferencia = p.resolvido === true
+          ? 'RESOLVIDO'
+          : classificarStatus(recebimentoPago, diferenca);
 
         return {
           nf: {
@@ -402,6 +416,11 @@ export function useConferenciaComplementares() {
           totalConfrontado,
           diferenca,
           status,
+          resolvido: p.resolvido ?? false,
+          resolvido_motivo: p.resolvido_motivo ?? null,
+          resolvido_em: p.resolvido_em ?? null,
+          resolvido_por: p.resolvido_por ?? null,
+          resolvido_nf_compl: p.resolvido_nf_compl ?? null,
         };
       });
 
@@ -411,6 +430,7 @@ export function useConferenciaComplementares() {
         atencao: itens.filter((i) => i.status === 'ATENCAO').length,
         divergentes: itens.filter((i) => i.status === 'DIVERGENTE').length,
         aguardando: itens.filter((i) => i.status === 'AGUARDANDO').length,
+        resolvidos: itens.filter((i) => i.status === 'RESOLVIDO').length,
         valorNfs: itens.reduce((s, i) => s + i.nf.valor_final, 0),
         valorRecebido: itens.reduce((s, i) => s + i.recebimentoPago, 0),
         valorComplementares: itens.reduce((s, i) => s + i.totalComplementares, 0),

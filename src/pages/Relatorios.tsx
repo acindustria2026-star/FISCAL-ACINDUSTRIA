@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
   Boxes,
@@ -50,6 +51,8 @@ import {
   exportarExcelRelatorio,
   type DadosRelatorio,
 } from '../lib/relatorioPrecoReal';
+import { supabase } from '../lib/supabase';
+import { ModalResolucao } from '../components/nfs/ModalResolucao';
 import type { EmpresaRow } from '../types/database';
 
 type Aba =
@@ -1368,11 +1371,24 @@ const STATUS_INFO: Record<
     bg: 'bg-surface-2',
     text: 'text-text-2',
   },
+  RESOLVIDO: {
+    label: 'RESOLVIDO',
+    emoji: '✅',
+    borda: 'border-emerald-500/40',
+    bg: 'bg-emerald-500/10',
+    text: 'text-emerald-300',
+  },
 };
 
 function ViewComplementares() {
   const [cardExpandido, setCardExpandido] = useState<string | null>(null);
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('TODOS');
+  const [modalResolucaoNF, setModalResolucaoNF] = useState<ItemConferencia | null>(null);
+  const queryClient = useQueryClient();
+
+  function refrescar() {
+    queryClient.invalidateQueries({ queryKey: ['conferencia-complementares'] });
+  }
 
   const dados = useConferenciaComplementares();
   const itens = dados.data?.itens ?? [];
@@ -1413,7 +1429,7 @@ function ViewComplementares() {
       ) : (
         <>
           {/* Cards de status (clicáveis) */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <StatusCard
               status="CONFERIDO"
               qtd={resumo.conferidos}
@@ -1437,6 +1453,12 @@ function ViewComplementares() {
               qtd={resumo.aguardando}
               ativo={filtroStatus === 'AGUARDANDO'}
               onClick={() => toggleFiltro('AGUARDANDO')}
+            />
+            <StatusCard
+              status="RESOLVIDO"
+              qtd={resumo.resolvidos}
+              ativo={filtroStatus === 'RESOLVIDO'}
+              onClick={() => toggleFiltro('RESOLVIDO')}
             />
           </div>
 
@@ -1514,10 +1536,30 @@ function ViewComplementares() {
                 onToggle={() =>
                   setCardExpandido((atual) => (atual === item.nf.id ? null : item.nf.id))
                 }
+                onResolver={() => setModalResolucaoNF(item)}
+                onReverter={refrescar}
               />
             ))
           )}
         </>
+      )}
+
+      {modalResolucaoNF && (
+        <ModalResolucao
+          isOpen={true}
+          onClose={() => setModalResolucaoNF(null)}
+          onResolved={() => {
+            setModalResolucaoNF(null);
+            refrescar();
+          }}
+          nf={{
+            id: modalResolucaoNF.nf.id,
+            numero: modalResolucaoNF.nf.numero,
+            cliente_nome: modalResolucaoNF.nf.cliente_nome,
+            valor_final: modalResolucaoNF.nf.valor_final,
+          }}
+          complementaresSugeridas={modalResolucaoNF.complementares.map((c) => c.numero)}
+        />
       )}
     </div>
   );
@@ -1555,10 +1597,14 @@ function CardConferencia({
   item,
   expandido,
   onToggle,
+  onResolver,
+  onReverter,
 }: {
   item: ItemConferencia;
   expandido: boolean;
   onToggle: () => void;
+  onResolver: () => void;
+  onReverter: () => void;
 }) {
   const info = STATUS_INFO[item.status];
   const qtdCompl = item.complementares.length;
@@ -1743,6 +1789,62 @@ function CardConferencia({
                 {item.diferenca >= 0 ? '+' : ''}
                 {brl(item.diferenca)}
               </span>
+            </div>
+          )}
+
+          {/* Ações de resolução */}
+          {(item.status === 'DIVERGENTE' || item.status === 'ATENCAO') && (
+            <button
+              type="button"
+              onClick={onResolver}
+              className="w-full px-4 py-2 rounded-lg bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-sm font-medium hover:bg-emerald-500/30 transition"
+            >
+              ✅ Marcar como resolvido
+            </button>
+          )}
+
+          {item.status === 'RESOLVIDO' && (
+            <div className="space-y-3">
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4 space-y-1.5">
+                <p className="text-sm font-medium text-emerald-300">✅ Resolvido</p>
+                {item.resolvido_em && (
+                  <p className="text-xs text-text-3">
+                    Em{' '}
+                    {new Date(item.resolvido_em).toLocaleString('pt-BR', {
+                      timeZone: 'America/Sao_Paulo',
+                    })}
+                  </p>
+                )}
+                {item.resolvido_nf_compl && (
+                  <p className="text-sm text-text-2">
+                    ↗ Compensado pela NF{' '}
+                    <span className="text-purple-300 font-medium">{item.resolvido_nf_compl}</span>
+                  </p>
+                )}
+                {item.resolvido_motivo && (
+                  <p className="text-sm text-text-2 italic">"{item.resolvido_motivo}"</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!confirm('Reverter resolução dessa NF?')) return;
+                  await supabase
+                    .from('notas_fiscais')
+                    .update({
+                      resolvido: false,
+                      resolvido_motivo: null,
+                      resolvido_por: null,
+                      resolvido_em: null,
+                      resolvido_nf_compl: null,
+                    })
+                    .eq('id', item.nf.id);
+                  onReverter();
+                }}
+                className="w-full px-4 py-2 rounded-lg border border-border text-sm text-text-2 hover:bg-surface-3 transition"
+              >
+                🔄 Reverter resolução
+              </button>
             </div>
           )}
         </div>
