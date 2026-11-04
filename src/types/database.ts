@@ -134,6 +134,12 @@ export type NotaFiscalRow = {
   substituida_em: string | null;
   motivo_substituicao: MotivoComplementar | null;
 
+  resolvido: boolean;
+  resolvido_motivo: string | null;
+  resolvido_por: string | null;
+  resolvido_em: string | null;
+  resolvido_nf_compl: string | null;
+
   pedido_id: string | null;
   pedido_numero: string | null;
 

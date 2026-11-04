@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, GitCompare } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Loading } from '../components/ui/Loading';
 import { useToast } from '../components/ui/Toast';
 import { CardComparativo } from '../components/comparativo/CardComparativo';
 import { BarraFlutuante } from '../components/comparativo/BarraFlutuante';
-import { useComparativo, type StatusComparativo } from '../hooks/useComparativo';
+import { ModalResolucao } from '../components/nfs/ModalResolucao';
+import { useComparativo, type StatusComparativo, type ItemComparativo } from '../hooks/useComparativo';
 import { useEmpresa } from '../hooks/useEmpresa';
 import { usePeriodo } from '../contexts/PeriodoContext';
 import { imprimirComprovante } from '../utils/impressao';
@@ -26,9 +28,15 @@ export default function Comparativo() {
   const empresa = useEmpresa();
   const { formatarPeriodo } = usePeriodo();
   const toast = useToast();
+  const queryClient = useQueryClient();
 
   const [filtro, setFiltro] = useState<Filtro>('todas');
   const [selecao, setSelecao] = useState<Set<string>>(new Set());
+  const [modalResolucao, setModalResolucao] = useState<ItemComparativo | null>(null);
+
+  function refrescar() {
+    queryClient.invalidateQueries({ queryKey: ['comparativo'] });
+  }
 
   const itens = lista.data ?? [];
 
@@ -193,10 +201,30 @@ export default function Comparativo() {
               item={item}
               selecionada={selecao.has(item.nf.id)}
               onToggleSelecao={() => toggle(item.nf.id)}
+              onResolver={() => setModalResolucao(item)}
+              onReverter={refrescar}
             />
           ))
         )}
       </div>
+
+      {modalResolucao && (
+        <ModalResolucao
+          isOpen={true}
+          onClose={() => setModalResolucao(null)}
+          onResolved={() => {
+            setModalResolucao(null);
+            refrescar();
+          }}
+          nf={{
+            id: modalResolucao.nf.id,
+            numero: modalResolucao.nf.numero,
+            cliente_nome: modalResolucao.nf.cliente_nome,
+            valor_final: modalResolucao.nf.valor_final,
+          }}
+          complementaresSugeridas={[]}
+        />
+      )}
     </div>
   );
 }

@@ -4,25 +4,31 @@ import { AvatarCliente } from '../ui/AvatarCliente';
 import { BlocoComparativo, LinhaComparativo } from './BlocoComparativo';
 import { StatusPillComparativo, corBarraStatus } from './StatusPillComparativo';
 import { brl, brl4, formatarData, kg as fmtKg } from '../../lib/formatters';
+import { reverterResolucao } from '../../lib/resolverNF';
 import type { ItemComparativo } from '../../hooks/useComparativo';
 
 interface Props {
   item: ItemComparativo;
   selecionada: boolean;
   onToggleSelecao: () => void;
+  onResolver: () => void;
+  onReverter: () => void;
 }
 
-export function CardComparativo({ item, selecionada, onToggleSelecao }: Props) {
+export function CardComparativo({ item, selecionada, onToggleSelecao, onResolver, onReverter }: Props) {
   const [aberto, setAberto] = useState(false);
   const c = item;
   const valorRef = c.valorPago ?? c.valorFinalNf;
+  const resolvido = c.nf.resolvido === true;
 
   return (
     <div
       className={`rounded-[14px] overflow-hidden border transition ${
         selecionada
           ? 'border-accent shadow-[0_4px_16px_rgba(212,160,23,0.15)]'
-          : 'border-border'
+          : resolvido
+            ? 'border-emerald-500/40'
+            : 'border-border'
       }`}
       style={{
         background: selecionada
@@ -30,7 +36,7 @@ export function CardComparativo({ item, selecionada, onToggleSelecao }: Props) {
           : 'var(--surface)',
       }}
     >
-      <div className={`h-[3px] ${corBarraStatus[c.status]}`} />
+      <div className={`h-[3px] ${resolvido ? 'bg-emerald-500' : corBarraStatus[c.status]}`} />
 
       <div className="flex">
         <button
@@ -88,7 +94,13 @@ export function CardComparativo({ item, selecionada, onToggleSelecao }: Props) {
             <span className="hidden md:inline text-sm text-text font-serif-display font-mono-num min-w-[120px] text-right">
               {brl(valorRef)}
             </span>
-            <StatusPillComparativo status={c.status} />
+            {resolvido ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
+                ✅ Resolvido
+              </span>
+            ) : (
+              <StatusPillComparativo status={c.status} />
+            )}
           </button>
 
           {aberto && (
@@ -162,6 +174,56 @@ export function CardComparativo({ item, selecionada, onToggleSelecao }: Props) {
                   />
                 </BlocoComparativo>
               </div>
+
+              {/* Ações de resolução */}
+              {c.status === 'divergente' && !resolvido && (
+                <div className="mt-5 pt-4 border-t border-border-soft">
+                  <button
+                    type="button"
+                    onClick={onResolver}
+                    className="w-full px-4 py-2 rounded-lg bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-sm font-medium hover:bg-emerald-500/30 transition"
+                  >
+                    ✅ Marcar como resolvido
+                  </button>
+                </div>
+              )}
+
+              {resolvido && (
+                <div className="mt-5 pt-4 border-t border-border-soft space-y-3">
+                  <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4 space-y-1.5">
+                    <p className="text-sm font-medium text-emerald-300">✅ Resolvido</p>
+                    {c.nf.resolvido_em && (
+                      <p className="text-xs text-text-3">
+                        Em{' '}
+                        {new Date(c.nf.resolvido_em).toLocaleString('pt-BR', {
+                          timeZone: 'America/Sao_Paulo',
+                        })}
+                      </p>
+                    )}
+                    {c.nf.resolvido_nf_compl && (
+                      <p className="text-sm text-text-2">
+                        ↗ Compensado pela NF{' '}
+                        <span className="text-purple-300 font-medium">{c.nf.resolvido_nf_compl}</span>
+                      </p>
+                    )}
+                    {c.nf.resolvido_motivo && (
+                      <p className="text-sm text-text-2 italic">"{c.nf.resolvido_motivo}"</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!confirm('Reverter resolução dessa NF?')) return;
+                      const { error } = await reverterResolucao(c.nf.id);
+                      if (error) alert(error);
+                      else onReverter();
+                    }}
+                    className="w-full px-4 py-2 rounded-lg border border-border text-sm text-text-2 hover:bg-surface-3 transition"
+                  >
+                    🔄 Reverter resolução
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

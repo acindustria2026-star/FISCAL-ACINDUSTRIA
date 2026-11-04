@@ -51,8 +51,8 @@ import {
   exportarExcelRelatorio,
   type DadosRelatorio,
 } from '../lib/relatorioPrecoReal';
-import { supabase } from '../lib/supabase';
 import { ModalResolucao } from '../components/nfs/ModalResolucao';
+import { reverterResolucao } from '../lib/resolverNF';
 import type { EmpresaRow } from '../types/database';
 
 type Aba =
@@ -1829,17 +1829,9 @@ function CardConferencia({
                 type="button"
                 onClick={async () => {
                   if (!confirm('Reverter resolução dessa NF?')) return;
-                  await supabase
-                    .from('notas_fiscais')
-                    .update({
-                      resolvido: false,
-                      resolvido_motivo: null,
-                      resolvido_por: null,
-                      resolvido_em: null,
-                      resolvido_nf_compl: null,
-                    })
-                    .eq('id', item.nf.id);
-                  onReverter();
+                  const { error } = await reverterResolucao(item.nf.id);
+                  if (error) alert(error);
+                  else onReverter();
                 }}
                 className="w-full px-4 py-2 rounded-lg border border-border text-sm text-text-2 hover:bg-surface-3 transition"
               >
