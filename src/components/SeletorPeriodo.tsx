@@ -22,25 +22,12 @@ const chevron =
   "viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23666'/%3E%3C/svg%3E\")";
 
 export function SeletorPeriodo() {
-  const { mes, ano, isTodos, setPeriodo } = usePeriodo();
+  const { mes, ano, setPeriodo } = usePeriodo();
 
   return (
     <div className="flex items-center gap-2">
-      <button
-        type="button"
-        onClick={() => setPeriodo({ mes: null, ano: null })}
-        className={`h-8 px-3 rounded-full text-xs transition font-mono-num border ${
-          isTodos
-            ? 'bg-accent text-[#0B0B0D] font-medium border-accent'
-            : 'text-text-2 border-border hover:text-text hover:bg-surface-3'
-        }`}
-      >
-        Todos
-      </button>
-
       <select
         value={mes ?? ''}
-        disabled={isTodos}
         onChange={(e) => {
           const val = e.target.value;
           setPeriodo({
@@ -61,7 +48,6 @@ export function SeletorPeriodo() {
 
       <select
         value={ano ?? ''}
-        disabled={isTodos}
         onChange={(e) => {
           const val = e.target.value;
           setPeriodo({ mes, ano: val === '' ? null : Number(val) });
