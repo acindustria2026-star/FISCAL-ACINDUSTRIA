@@ -1,10 +1,13 @@
-import { FileText, GitBranch, PackageCheck, Pencil, Trash2, Truck } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ChevronDown, ChevronRight, FileText, GitBranch, PackageCheck, Pencil, Trash2, Truck } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { AvatarCliente } from '../ui/AvatarCliente';
 import { EmptyState } from '../ui/EmptyState';
 import { Loading } from '../ui/Loading';
 import { brl, brl4, formatarData, kg as fmtKg } from '../../lib/formatters';
+import { supabase } from '../../lib/supabase';
 import type { NfComRelacoes } from '../../hooks/useNfs';
+import type { NfItemRow } from '../../types/database';
 
 interface Props {
   nfs: NfComRelacoes[];
@@ -33,6 +36,8 @@ export function TabelaNFs({
   onAbrirVinculo,
   onReceber,
 }: Props) {
+  const [expandedNfId, setExpandedNfId] = useState<string | null>(null);
+
   if (isLoading) return <Loading fullScreen={false} text="Carregando notas..." />;
   if (nfs.length === 0) {
     return (
@@ -74,14 +79,23 @@ export function TabelaNFs({
               const precoMudou =
                 nf.preco_final_kg !== null &&
                 Math.abs(Number(nf.preco_final_kg) - Number(nf.preco_negociado)) > 0.0001;
+              const ehMultiMaterial = /^\d+ materiais$/.test(nf.material ?? '');
+              const estaExpandido = expandedNfId === nf.id;
+              const totalCols = podeEditar ? 11 : 10;
 
               return (
+                <React.Fragment key={nf.id}>
                 <tr
-                  key={nf.id}
-                  className="border-b border-border-soft last:border-b-0 hover:bg-surface-2 transition"
+                  className={`border-b border-border-soft hover:bg-surface-2 transition ${estaExpandido ? '' : 'last:border-b-0'} ${ehMultiMaterial ? 'cursor-pointer' : ''}`}
+                  onClick={ehMultiMaterial ? () => setExpandedNfId(estaExpandido ? null : nf.id) : undefined}
                 >
                   <td className="px-3 py-3">
                     <div className="flex items-center gap-1.5 flex-wrap">
+                      {ehMultiMaterial && (
+                        <span className="text-text-3 flex-shrink-0">
+                          {estaExpandido ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                        </span>
+                      )}
                       <span className="text-sm text-text font-mono-num">{nf.numero}</span>
                       {ehFilha && (
                         <BadgeVinculoPai
@@ -148,32 +162,82 @@ export function TabelaNFs({
                         {onReceber && !temRecebimento(nf) && (
                           <button
                             type="button"
-                            onClick={() => onReceber(nf)}
+                            onClick={(e) => { e.stopPropagation(); onReceber(nf); }}
                             title="Lançar recebimento"
                             className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-xs bg-accent-soft-bg text-accent border border-accent-soft-border hover:brightness-125 transition"
                           >
                             <PackageCheck size={12} /> Receber
                           </button>
                         )}
-                        <IconBtn label="Complementar" onClick={() => onComplementar(nf)}>
+                        <IconBtn label="Complementar" onClick={(e) => { e.stopPropagation(); onComplementar(nf); }}>
                           <GitBranch size={13} />
                         </IconBtn>
-                        <IconBtn label="Editar" onClick={() => onEditar(nf)}>
+                        <IconBtn label="Editar" onClick={(e) => { e.stopPropagation(); onEditar(nf); }}>
                           <Pencil size={13} />
                         </IconBtn>
-                        <IconBtn label="Excluir" warn onClick={() => onExcluir(nf)}>
+                        <IconBtn label="Excluir" warn onClick={(e) => { e.stopPropagation(); onExcluir(nf); }}>
                           <Trash2 size={13} />
                         </IconBtn>
                       </div>
                     </td>
                   )}
                 </tr>
+                {ehMultiMaterial && estaExpandido && (
+                  <tr key={`${nf.id}-itens`} className="border-b border-border-soft bg-surface-2/50">
+                    <td colSpan={totalCols} className="px-4 py-3">
+                      <ListaItens nfId={nf.id} />
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               );
             })}
           </tbody>
         </table>
       </div>
     </Card>
+  );
+}
+
+function ListaItens({ nfId }: { nfId: string }) {
+  const [itens, setItens] = useState<NfItemRow[]>([]);
+
+  useEffect(() => {
+    supabase
+      .from('nf_itens')
+      .select('*')
+      .eq('nf_id', nfId)
+      .order('ordem')
+      .then(({ data }) => setItens((data ?? []) as NfItemRow[]));
+  }, [nfId]);
+
+  if (itens.length <= 1) return null;
+
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-[0.14em] text-text-3 mb-2">
+        Itens ({itens.length})
+      </p>
+      <div className="flex flex-col gap-1">
+        {itens.map((item, idx) => (
+          <div
+            key={item.id}
+            className="flex justify-between items-center text-sm bg-surface-3 rounded-lg px-3 py-2"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-text-3 font-mono-num text-xs flex-shrink-0">{idx + 1}.</span>
+              <span className="font-medium text-text truncate">{item.material}</span>
+              <span className="text-text-3 text-xs font-mono-num flex-shrink-0">
+                {fmtKg(item.peso)} · {brl4(item.preco_negociado)}/kg
+              </span>
+            </div>
+            <span className="font-mono-num text-accent flex-shrink-0 ml-4">
+              {brl(item.valor_final)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -230,7 +294,7 @@ function IconBtn({
   children: React.ReactNode;
   label: string;
   warn?: boolean;
-  onClick: () => void;
+  onClick: (e: React.MouseEvent) => void;
 }) {
   return (
     <button

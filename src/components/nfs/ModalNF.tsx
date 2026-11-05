@@ -9,6 +9,7 @@ import { Card } from '../ui/Card';
 import { CampoComSugestoes, type SugestaoItem } from '../ui/CampoComSugestoes';
 import { useToast } from '../ui/Toast';
 import { useClientes, useCriarCliente } from '../../hooks/useClientes';
+import { useMateriais } from '../../hooks/useMateriais';
 import {
   useCriarNf,
   useEditarNf,
@@ -27,6 +28,7 @@ import {
   MOTIVOS_COMPLEMENTAR,
   nfFormSchema,
   type NfFormData,
+  type ItemNF,
 } from '../../schemas/nf';
 import type {
   ClienteRow,
@@ -48,24 +50,23 @@ interface Props {
 
 type ModoComp = 'nova' | 'substituir';
 
-function itemDeNf(nf: NfComRelacoes): NfFormData['itens'][0] {
+function itemDeNf(nf: NfComRelacoes): ItemNF {
   return {
+    id: null,
     material: nf.material ?? '',
-    peso: String(nf.peso),
-    preco_negociado: String(nf.preco_negociado),
-    icms_ativo: nf.icms_ativo,
-    piscofins_ativo: nf.piscofins_ativo,
-    icms_pct_pp: String(Number(nf.icms_pct) * 100),
-    pis_pct_pp: String(Number(nf.pis_pct) * 100),
-    cofins_pct_pp: String(Number(nf.cofins_pct) * 100),
+    peso: Number(nf.peso),
+    preco_negociado: Number(nf.preco_negociado),
+    icms_pct: Number(nf.icms_pct) * 100,
+    pis_pct: Number(nf.pis_pct) * 100,
+    cofins_pct: Number(nf.cofins_pct) * 100,
   };
 }
 
 const formDefault = (ctx: ModalNfContexto): NfFormData => {
   const today = dataHojeISO();
-  const defaultIcms = String(ALIQUOTAS_PADRAO.ICMS * 100);
-  const defaultPis = String(ALIQUOTAS_PADRAO.PIS * 100);
-  const defaultCofins = String(ALIQUOTAS_PADRAO.COFINS * 100);
+  const defaultIcms = ALIQUOTAS_PADRAO.ICMS * 100;
+  const defaultPis = ALIQUOTAS_PADRAO.PIS * 100;
+  const defaultCofins = ALIQUOTAS_PADRAO.COFINS * 100;
 
   if (ctx.kind === 'editar') {
     const n = ctx.nf;
@@ -133,9 +134,9 @@ const formDefault = (ctx: ModalNfContexto): NfFormData => {
     preco_negociado: '0',
     icms_ativo: true,
     piscofins_ativo: true,
-    icms_pct_pp: defaultIcms,
-    pis_pct_pp: defaultPis,
-    cofins_pct_pp: defaultCofins,
+    icms_pct_pp: String(defaultIcms),
+    pis_pct_pp: String(defaultPis),
+    cofins_pct_pp: String(defaultCofins),
     tipo_frete: null,
     transportadora: '',
     placa_veiculo: '',
@@ -147,14 +148,13 @@ const formDefault = (ctx: ModalNfContexto): NfFormData => {
     nf_pai_id: null,
     nf_pai_numero: null,
     itens: [{
+      id: null,
       material: '',
-      peso: '',
-      preco_negociado: '',
-      icms_ativo: true,
-      piscofins_ativo: true,
-      icms_pct_pp: defaultIcms,
-      pis_pct_pp: defaultPis,
-      cofins_pct_pp: defaultCofins,
+      peso: 0,
+      preco_negociado: 0,
+      icms_pct: defaultIcms,
+      pis_pct: defaultPis,
+      cofins_pct: defaultCofins,
     }],
   };
 };
@@ -178,6 +178,7 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
   const toast = useToast();
   const { perfil } = useAuth();
   const clientes = useClientes();
+  const materiais = useMateriais();
   const criarCliente = useCriarCliente();
   const criarNf = useCriarNf();
   const editarNf = useEditarNf();
@@ -200,7 +201,6 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
         contexto.nf.tipo_frete;
       if (tem) setTransporteAberto(true);
 
-      // Load existing nf_itens from DB
       supabase
         .from('nf_itens')
         .select('*')
@@ -211,14 +211,13 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
           form.setValue(
             'itens',
             (data as NfItemRow[]).map((item) => ({
+              id: item.id,
               material: item.material,
-              peso: String(item.peso),
-              preco_negociado: String(item.preco_negociado),
-              icms_ativo: Number(item.icms_pct) > 0,
-              piscofins_ativo: Number(item.pis_pct) > 0 || Number(item.cofins_pct) > 0,
-              icms_pct_pp: String(Math.round(Number(item.icms_pct) * 100 * 10000) / 10000),
-              pis_pct_pp: String(Math.round(Number(item.pis_pct) * 100 * 10000) / 10000),
-              cofins_pct_pp: String(Math.round(Number(item.cofins_pct) * 100 * 10000) / 10000),
+              peso: Number(item.peso),
+              preco_negociado: Number(item.preco_negociado),
+              icms_pct: Number(item.icms_pct) * 100,
+              pis_pct: Number(item.pis_pct) * 100,
+              cofins_pct: Number(item.cofins_pct) * 100,
             })),
           );
         });
@@ -256,16 +255,7 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
     }
   }
 
-  async function salvarItens(nfId: string, itens: Array<{
-    material: string;
-    peso: number;
-    preco_negociado: number;
-    icms_ativo: boolean;
-    piscofins_ativo: boolean;
-    icms_pct_pp: number;
-    pis_pct_pp: number;
-    cofins_pct_pp: number;
-  }>) {
+  async function salvarItens(nfId: string, itens: ItemNF[]) {
     if (!perfil) throw new Error('Não autenticado');
 
     await supabase.from('nf_itens').delete().eq('nf_id', nfId);
@@ -274,19 +264,19 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
     const r4 = (n: number) => Math.round(n * 10000) / 10000;
 
     const inserir = itens.map((item, idx) => {
-      const icmsPct = item.icms_ativo ? item.icms_pct_pp / 100 : 0;
-      const pisPct = item.piscofins_ativo ? item.pis_pct_pp / 100 : 0;
-      const cofinsPct = item.piscofins_ativo ? item.cofins_pct_pp / 100 : 0;
+      const icmsPct = Number(item.icms_pct) / 100;
+      const pisPct = Number(item.pis_pct) / 100;
+      const cofinsPct = Number(item.cofins_pct) / 100;
       const totalPct = icmsPct + pisPct + cofinsPct;
-      const valorNeg = item.peso * item.preco_negociado;
+      const valorNeg = Number(item.peso) * Number(item.preco_negociado);
       const valorFinal = totalPct > 0 && totalPct < 1 ? valorNeg / (1 - totalPct) : valorNeg;
       return {
         empresa_id: perfil.empresa_id,
         nf_id: nfId,
         ordem: idx + 1,
         material: item.material,
-        peso: item.peso,
-        preco_negociado: item.preco_negociado,
+        peso: Number(item.peso),
+        preco_negociado: Number(item.preco_negociado),
         icms_pct: icmsPct,
         pis_pct: pisPct,
         cofins_pct: cofinsPct,
@@ -300,9 +290,9 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
     const { error: insError } = await supabase.from('nf_itens').insert(inserir);
     if (insError) throw new Error(insError.message);
 
-    const totalPeso = itens.reduce((s, i) => s + i.peso, 0);
+    const totalPeso = itens.reduce((s, i) => s + Number(i.peso), 0);
     const totalValorFinal = inserir.reduce((s, i) => s + i.valor_final, 0);
-    const totalValorNeg = itens.reduce((s, i) => s + i.peso * i.preco_negociado, 0);
+    const totalValorNeg = itens.reduce((s, i) => s + Number(i.peso) * Number(i.preco_negociado), 0);
     const totalIcms = inserir.reduce((s, i) => s + i.icms_valor, 0);
     const totalPis = inserir.reduce((s, i) => s + i.pis_valor, 0);
     const totalCofins = inserir.reduce((s, i) => s + i.cofins_valor, 0);
@@ -312,7 +302,7 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
     const updateData: Record<string, unknown> = {
       material: itens.length === 1 ? primeiroItem.material : `${itens.length} materiais`,
       peso: totalPeso,
-      preco_negociado: itens.length === 1 ? primeiroItem.preco_negociado : 0,
+      preco_negociado: itens.length === 1 ? Number(primeiroItem.preco_negociado) : 0,
       valor_negociado: r2(totalValorNeg),
       valor_final: r2(totalValorFinal),
       icms: r2(totalIcms),
@@ -322,11 +312,12 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
       preco_final_kg: precoFinalKg,
     };
     if (itens.length === 1) {
-      updateData.icms_ativo = primeiroItem.icms_ativo;
-      updateData.piscofins_ativo = primeiroItem.piscofins_ativo;
-      updateData.icms_pct = primeiroItem.icms_ativo ? primeiroItem.icms_pct_pp / 100 : 0;
-      updateData.pis_pct = primeiroItem.piscofins_ativo ? primeiroItem.pis_pct_pp / 100 : 0;
-      updateData.cofins_pct = primeiroItem.piscofins_ativo ? primeiroItem.cofins_pct_pp / 100 : 0;
+      updateData.icms_ativo = Number(primeiroItem.icms_pct) > 0;
+      updateData.piscofins_ativo =
+        Number(primeiroItem.pis_pct) > 0 || Number(primeiroItem.cofins_pct) > 0;
+      updateData.icms_pct = Number(primeiroItem.icms_pct) / 100;
+      updateData.pis_pct = Number(primeiroItem.pis_pct) / 100;
+      updateData.cofins_pct = Number(primeiroItem.cofins_pct) / 100;
     }
 
     const { error: updError } = await supabase
@@ -368,11 +359,11 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
       material: itens.length === 1 ? (primeiroItem.material || null) : `${itens.length} materiais`,
       peso: totalPeso,
       preco_negociado: itens.length === 1 ? primeiroItem.preco_negociado : 0,
-      icms_ativo: primeiroItem.icms_ativo,
-      piscofins_ativo: primeiroItem.piscofins_ativo,
-      icms_pct: primeiroItem.icms_ativo ? primeiroItem.icms_pct_pp / 100 : 0,
-      pis_pct: primeiroItem.piscofins_ativo ? primeiroItem.pis_pct_pp / 100 : 0,
-      cofins_pct: primeiroItem.piscofins_ativo ? primeiroItem.cofins_pct_pp / 100 : 0,
+      icms_ativo: primeiroItem.icms_pct > 0,
+      piscofins_ativo: primeiroItem.pis_pct > 0 || primeiroItem.cofins_pct > 0,
+      icms_pct: primeiroItem.icms_pct / 100,
+      pis_pct: primeiroItem.pis_pct / 100,
+      cofins_pct: primeiroItem.cofins_pct / 100,
       tipo_frete: calcData.tipo_frete ?? null,
       transportadora: calcData.transportadora?.trim() || null,
       placa_veiculo: calcData.placa_veiculo?.trim() || null,
@@ -416,7 +407,7 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
 
   const pesoAtualItens = useMemo(() => {
     return (valores.itens ?? []).reduce(
-      (s, i) => s + (Number(String(i?.peso ?? '0').replace(',', '.')) || 0),
+      (s, i) => s + (Number(i?.peso ?? 0) || 0),
       0,
     );
   }, [valores.itens]);
@@ -497,7 +488,7 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
             }}
           />
 
-          <ItensNF />
+          <ItensNF materiais={materiais.data ?? []} />
 
           <SecaoTransporte
             aberto={transporteAberto}
@@ -640,7 +631,6 @@ function CriadoEditadoPor({ nf }: { nf: NfComRelacoes }) {
     <p className="text-[11px] text-text-3 -mt-1">{partes.join(' · ')}</p>
   );
 }
-
 
 function SecaoTransporte({
   aberto,

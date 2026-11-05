@@ -1,95 +1,51 @@
-import { useMemo } from 'react';
 import { useFieldArray, useFormContext } from 'react-hook-form';
 import { Plus, Trash2 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Input } from '../ui/Input';
-import { CampoComSugestoes, type SugestaoItem } from '../ui/CampoComSugestoes';
-import { useToast } from '../ui/Toast';
-import { useMateriais, useCriarMaterial } from '../../hooks/useMateriais';
-import { calcularImpostos, ALIQUOTAS_PADRAO } from '../../utils/calculos';
-import { brl } from '../../lib/formatters';
-import type { NfFormData, ItemNFFormData } from '../../schemas/nf';
+import { brl, kg as fmtKg } from '../../lib/formatters';
+import type { NfFormData, ItemNF } from '../../schemas/nf';
 import type { MaterialRow } from '../../types/database';
 
-function itemPadrao(): ItemNFFormData {
+interface Props {
+  materiais: MaterialRow[];
+}
+
+function itemPadrao(): ItemNF {
   return {
+    id: null,
     material: '',
-    peso: '',
-    preco_negociado: '',
-    icms_ativo: true,
-    piscofins_ativo: true,
-    icms_pct_pp: String(ALIQUOTAS_PADRAO.ICMS * 100),
-    pis_pct_pp: String(ALIQUOTAS_PADRAO.PIS * 100),
-    cofins_pct_pp: String(ALIQUOTAS_PADRAO.COFINS * 100),
+    peso: 0,
+    preco_negociado: 0,
+    icms_pct: 0,
+    pis_pct: 0,
+    cofins_pct: 0,
   };
 }
 
-function calcItem(vals: ItemNFFormData | undefined) {
-  const peso = Number(String(vals?.peso ?? '').replace(',', '.')) || 0;
-  const preco = Number(String(vals?.preco_negociado ?? '').replace(',', '.')) || 0;
-  const icmsAtivo = vals?.icms_ativo ?? true;
-  const piscofinsAtivo = vals?.piscofins_ativo ?? true;
-  const icms = icmsAtivo ? (Number(String(vals?.icms_pct_pp ?? '').replace(',', '.')) || 0) : 0;
-  const pis = piscofinsAtivo ? (Number(String(vals?.pis_pct_pp ?? '').replace(',', '.')) || 0) : 0;
-  const cofins = piscofinsAtivo ? (Number(String(vals?.cofins_pct_pp ?? '').replace(',', '.')) || 0) : 0;
-  return calcularImpostos({
-    peso,
-    precoNegociado: preco,
-    icmsAtivo,
-    piscofinsAtivo,
-    icmsPct: icms / 100,
-    pisPct: pis / 100,
-    cofinsPct: cofins / 100,
-  });
-}
-
-export function ItensNF() {
-  const toast = useToast();
-  const materiais = useMateriais();
-  const criarMaterial = useCriarMaterial();
-
+export function ItensNF({ materiais }: Props) {
   const {
     control,
-    watch,
     register,
+    watch,
     setValue,
     formState: { errors },
   } = useFormContext<NfFormData>();
 
   const { fields, append, remove } = useFieldArray({ control, name: 'itens' });
-
-  const sugestoes = useMemo<SugestaoItem<MaterialRow>[]>(
-    () => (materiais.data ?? []).map((m) => ({ id: m.id, label: m.nome, payload: m })),
-    [materiais.data],
-  );
-
   const valoresItens = watch('itens') ?? [];
 
-  const totais = useMemo(() => {
-    return valoresItens.reduce(
-      (acc, item) => {
-        const c = calcItem(item);
-        return {
-          valorFinal: acc.valorFinal + c.valorFinal,
-          totalImpostos: acc.totalImpostos + c.totalImpostos,
-        };
-      },
-      { valorFinal: 0, totalImpostos: 0 },
-    );
-  }, [valoresItens]);
+  const totalPeso = valoresItens.reduce((s, i) => s + Number(i?.peso ?? 0), 0);
+  const totalNegociado = valoresItens.reduce(
+    (s, i) => s + Number(i?.peso ?? 0) * Number(i?.preco_negociado ?? 0),
+    0,
+  );
 
-  async function onCriarMaterial(nome: string, idx: number) {
-    try {
-      const novo = await criarMaterial.mutateAsync({
-        nome,
-        icms_padrao: 18,
-        pis_padrao: 1.65,
-        cofins_padrao: 7.6,
-      });
-      setValue(`itens.${idx}.material`, novo.nome, { shouldValidate: true });
-      toast.success(`Material "${nome}" criado`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao criar material');
+  function aplicarAliquotasDoMaterial(idx: number, nomeMaterial: string) {
+    const mat = materiais.find((m) => m.nome === nomeMaterial);
+    if (mat) {
+      setValue(`itens.${idx}.icms_pct`, mat.icms_padrao ?? 0);
+      setValue(`itens.${idx}.pis_pct`, mat.pis_padrao ?? 0);
+      setValue(`itens.${idx}.cofins_pct`, mat.cofins_padrao ?? 0);
     }
   }
 
@@ -112,12 +68,25 @@ export function ItensNF() {
         )}
       </div>
 
+      {fields.length === 0 && (
+        <div className="text-center py-8 border border-dashed border-border rounded-xl">
+          <p className="text-sm text-text-3 mb-2">Nenhum item adicionado</p>
+          <button
+            type="button"
+            onClick={() => append(itemPadrao())}
+            className="text-sm text-accent hover:underline"
+          >
+            Adicionar primeiro item
+          </button>
+        </div>
+      )}
+
       {fields.map((field, idx) => {
         const vals = valoresItens[idx];
-        const preview = calcItem(vals);
+        const peso = Number(vals?.peso ?? 0);
+        const preco = Number(vals?.preco_negociado ?? 0);
+        const subtotal = peso * preco;
         const errosItem = Array.isArray(errors.itens) ? errors.itens[idx] : undefined;
-        const icmsAtivo = vals?.icms_ativo ?? true;
-        const piscofinsAtivo = vals?.piscofins_ativo ?? true;
 
         return (
           <Card key={field.id} className="p-4">
@@ -135,22 +104,27 @@ export function ItensNF() {
               )}
             </div>
 
-            <CampoComSugestoes
-              label="Material *"
-              value={vals?.material ?? ''}
-              onChange={(v) => setValue(`itens.${idx}.material`, v, { shouldValidate: true })}
-              onSelect={(item) => {
-                setValue(`itens.${idx}.material`, item.payload.nome, { shouldValidate: true });
-                setValue(`itens.${idx}.icms_pct_pp`, String(Number(item.payload.icms_padrao)), { shouldValidate: true });
-                setValue(`itens.${idx}.pis_pct_pp`, String(Number(item.payload.pis_padrao)), { shouldValidate: true });
-                setValue(`itens.${idx}.cofins_pct_pp`, String(Number(item.payload.cofins_padrao)), { shouldValidate: true });
-              }}
-              onCriar={(nome) => onCriarMaterial(nome, idx)}
-              sugestoes={sugestoes}
-              permitirNovo
-              placeholder="Sucata ferrosa, alumínio..."
-              error={errosItem?.material?.message}
-            />
+            <div>
+              <label className="text-sm text-text-2 font-medium">Material *</label>
+              <select
+                value={vals?.material ?? ''}
+                onChange={(e) => {
+                  setValue(`itens.${idx}.material`, e.target.value, { shouldValidate: true });
+                  aplicarAliquotasDoMaterial(idx, e.target.value);
+                }}
+                className="mt-1.5 w-full h-11 bg-surface-2 border border-border rounded-xl px-3.5 text-text outline-none focus:border-accent transition"
+              >
+                <option value="">Selecione...</option>
+                {materiais.map((m) => (
+                  <option key={m.id} value={m.nome}>
+                    {m.nome}
+                  </option>
+                ))}
+              </select>
+              {errosItem?.material?.message && (
+                <p className="text-xs text-warn mt-1">{errosItem.material.message}</p>
+              )}
+            </div>
 
             <div className="grid grid-cols-2 gap-3 mt-3">
               <Input
@@ -169,67 +143,35 @@ export function ItensNF() {
               />
             </div>
 
-            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="flex items-end gap-2">
-                <div className="flex flex-col gap-1 pb-0.5">
-                  <span className="text-xs text-text-2">ICMS</span>
-                  <ToggleSmall
-                    ativo={icmsAtivo}
-                    onChange={(v) => setValue(`itens.${idx}.icms_ativo`, v)}
-                  />
-                </div>
-                <Input
-                  label="Alíquota (%)"
-                  type="number"
-                  step="0.01"
-                  {...register(`itens.${idx}.icms_pct_pp`)}
-                  disabled={!icmsAtivo}
-                  className="flex-1"
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2 mt-auto pt-0.5">
-                  <ToggleSmall
-                    ativo={piscofinsAtivo}
-                    onChange={(v) => setValue(`itens.${idx}.piscofins_ativo`, v)}
-                  />
-                  <span className="text-xs text-text-2">PIS/COFINS</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <Input
-                    label="PIS (%)"
-                    type="number"
-                    step="0.01"
-                    {...register(`itens.${idx}.pis_pct_pp`)}
-                    disabled={!piscofinsAtivo}
-                  />
-                  <Input
-                    label="COFINS (%)"
-                    type="number"
-                    step="0.01"
-                    {...register(`itens.${idx}.cofins_pct_pp`)}
-                    disabled={!piscofinsAtivo}
-                  />
-                </div>
-              </div>
+            <div className="grid grid-cols-3 gap-3 mt-3">
+              <Input
+                label="ICMS (%)"
+                type="number"
+                step="0.01"
+                {...register(`itens.${idx}.icms_pct`)}
+              />
+              <Input
+                label="PIS (%)"
+                type="number"
+                step="0.01"
+                {...register(`itens.${idx}.pis_pct`)}
+              />
+              <Input
+                label="COFINS (%)"
+                type="number"
+                step="0.01"
+                {...register(`itens.${idx}.cofins_pct`)}
+              />
             </div>
 
-            <div className="mt-3 pt-3 border-t border-border-soft flex justify-end">
-              <div className="text-right">
-                <p className="text-xs text-text-3">Valor final do item</p>
-                <p
-                  className="font-serif-display font-mono-num text-lg"
-                  style={{
-                    background: 'linear-gradient(135deg, #F5C44A 0%, #D4A017 100%)',
-                    WebkitBackgroundClip: 'text',
-                    backgroundClip: 'text',
-                    color: 'transparent',
-                  }}
-                >
-                  {brl(preview.valorFinal)}
-                </p>
+            {subtotal > 0 && (
+              <div className="mt-3 pt-3 border-t border-border-soft flex justify-end">
+                <div className="text-right">
+                  <p className="text-xs text-text-3">Subtotal negociado</p>
+                  <p className="font-serif-display font-mono-num text-accent">{brl(subtotal)}</p>
+                </div>
               </div>
-            </div>
+            )}
           </Card>
         );
       })}
@@ -237,50 +179,21 @@ export function ItensNF() {
       {erroArray && <p className="text-xs text-warn">{erroArray}</p>}
 
       {fields.length > 1 && (
-        <div
-          className="relative overflow-hidden rounded-[14px] border border-accent-soft-border p-4"
-          style={{ background: 'linear-gradient(135deg, #2A2010 0%, transparent 100%)' }}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.16em] text-accent mb-1">Total consolidado</p>
-              <p className="text-xs text-text-3 font-mono-num">{fields.length} itens</p>
-            </div>
-            <div className="text-right">
-              <p
-                className="font-serif-display font-mono-num text-2xl"
-                style={{
-                  background: 'linear-gradient(135deg, #F5C44A 0%, #D4A017 100%)',
-                  WebkitBackgroundClip: 'text',
-                  backgroundClip: 'text',
-                  color: 'transparent',
-                }}
-              >
-                {brl(totais.valorFinal)}
-              </p>
-              <p className="text-xs text-text-3 font-mono-num">
-                impostos: {brl(totais.totalImpostos)}
-              </p>
-            </div>
+        <div className="rounded-[14px] border border-accent-soft-border bg-accent-soft-bg p-4 flex items-center justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.16em] text-accent mb-1">Total</p>
+            <p className="text-xs text-text-3 font-mono-num">
+              {fmtKg(totalPeso)} · {fields.length} itens
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="font-serif-display font-mono-num text-xl text-accent">
+              {brl(totalNegociado)}
+            </p>
+            <p className="text-xs text-text-3">valor negociado</p>
           </div>
         </div>
       )}
     </div>
-  );
-}
-
-function ToggleSmall({ ativo, onChange }: { ativo: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={ativo}
-      onClick={() => onChange(!ativo)}
-      className={`relative w-8 h-5 rounded-full transition flex-shrink-0 ${ativo ? 'bg-accent' : 'bg-surface-3'}`}
-    >
-      <span
-        className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition ${ativo ? 'translate-x-3' : ''}`}
-      />
-    </button>
   );
 }
