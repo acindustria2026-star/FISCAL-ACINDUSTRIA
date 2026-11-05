@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { usePeriodo } from '../contexts/PeriodoContext';
 import { dataHojeISO } from '../lib/dataUtils';
+import { obterValorRealmentePago } from '../lib/valoresRecebimento';
 import type { NotaFiscalRow, RecebimentoRow } from '../types/database';
 
 export type CategoriaFinanceiro = 'pago' | 'aReceber' | 'atrasada';
@@ -123,7 +124,7 @@ export function useFinanceiro() {
             diasParaVencer = diferencaDias(dPag, hoje);
           }
 
-          const valorAcordado = rec ? Number(rec.valor_pago) : Number(linha.valor_final);
+          const valorAcordado = rec ? obterValorRealmentePago(rec) : Number(linha.valor_final);
           const valorRealRecebido =
             rec?.valor_real_recebido !== null && rec?.valor_real_recebido !== undefined
               ? Number(rec.valor_real_recebido)

@@ -246,7 +246,7 @@ function gerarHTMLRelatorio(dados: DadosRelatorio): string {
       <div class="valor">${fmtKG(resumo.pesoTotal)} kg</div>
     </div>
     <div class="card">
-      <div class="label">Valor pago</div>
+      <div class="label">Valor realmente pago</div>
       <div class="valor">R$ ${fmtBRL(resumo.valorTotal)}</div>
     </div>
     <div class="card destaque">
@@ -300,7 +300,7 @@ function gerarHTMLRelatorio(dados: DadosRelatorio): string {
         <th>Cliente</th>
         <th>Material</th>
         <th class="num">Peso origem</th>
-        <th class="num">Valor pago</th>
+        <th class="num">Valor realmente pago</th>
         <th class="num">Preço real</th>
       </tr>
     </thead>
@@ -425,7 +425,7 @@ export function baixarPDFRelatorio(dados: DadosRelatorio): void {
   doc.text(`NFs processadas: ${resumo.totalNFs}`, 15, y);
   doc.text(`Peso de origem: ${fmtKG(resumo.pesoTotal)} kg`, 75, y);
   y += 5;
-  doc.text(`Valor pago: R$ ${fmtBRL(resumo.valorTotal)}`, 15, y);
+  doc.text(`Valor realmente pago: R$ ${fmtBRL(resumo.valorTotal)}`, 15, y);
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(184, 134, 11);
@@ -545,7 +545,7 @@ export function exportarExcelRelatorio(dados: DadosRelatorio): void {
     [],
     ['NFs processadas', dados.resumo.totalNFs],
     ['Peso de origem (kg)', dados.resumo.pesoTotal],
-    ['Valor pago total (R$)', dados.resumo.valorTotal],
+    ['Valor realmente pago total (R$)', dados.resumo.valorTotal],
     ['Preço real médio (R$/kg)', dados.resumo.precoMedio],
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumoData), 'Resumo');
@@ -557,7 +557,7 @@ export function exportarExcelRelatorio(dados: DadosRelatorio): void {
         Material: m.material,
         NFs: m.nfs,
         'Peso (kg)': m.peso,
-        'Valor pago (R$)': m.valor,
+        'Valor realmente pago (R$)': m.valor,
         'Preço real (R$/kg)': m.precoReal,
       })),
     ),
@@ -571,7 +571,7 @@ export function exportarExcelRelatorio(dados: DadosRelatorio): void {
         Fornecedor: c.cliente,
         NFs: c.nfs,
         'Peso (kg)': c.peso,
-        'Valor pago (R$)': c.valor,
+        'Valor realmente pago (R$)': c.valor,
         'Preço real (R$/kg)': c.precoReal,
       })),
     ),
@@ -587,7 +587,7 @@ export function exportarExcelRelatorio(dados: DadosRelatorio): void {
         Cliente: nf.cliente_nome,
         Material: nf.material,
         'Peso origem (kg)': nf.peso,
-        'Valor pago (R$)': nf.valor_pago,
+        'Valor realmente pago (R$)': nf.valor_pago,
         'Preço real (R$/kg)': nf.preco_real,
       })),
     ),

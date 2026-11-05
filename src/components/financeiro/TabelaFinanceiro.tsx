@@ -92,7 +92,7 @@ export function TabelaFinanceiro({
               {aba === 'pagas' && (
                 <>
                   <ThOrdenavel label="Val emitido" col="valor_emitido" estado={estadoSort} onToggle={onToggleSort} align="right" />
-                  <ThOrdenavel label="Val pago" col="valor_pago" estado={estadoSort} onToggle={onToggleSort} align="right" />
+                  <ThOrdenavel label="Val. real pago" col="valor_pago" estado={estadoSort} onToggle={onToggleSort} align="right" />
                   <ThOrdenavel label="Diferença" col="diferenca" estado={estadoSort} onToggle={onToggleSort} align="right" />
                   <ThOrdenavel label="Pago em" col="pago_em" estado={estadoSort} onToggle={onToggleSort} />
                 </>

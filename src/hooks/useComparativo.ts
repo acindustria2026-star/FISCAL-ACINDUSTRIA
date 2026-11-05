@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { usePeriodo } from '../contexts/PeriodoContext';
+import { obterValorRealmentePago } from '../lib/valoresRecebimento';
 import type { NotaFiscalRow, RecebimentoRow } from '../types/database';
 
 export type StatusComparativo = 'ok' | 'divergente' | 'aguardando';
@@ -87,7 +88,7 @@ export function useComparativo() {
         else if (difPesoPct !== null && Math.abs(difPesoPct) <= 0.02) status = 'ok';
         else status = 'divergente';
 
-        const valorPago = rec ? Number(rec.valor_pago) : null;
+        const valorPago = rec ? obterValorRealmentePago(rec) : null;
         const valorFinalNf = Number(linha.valor_final);
 
         return {

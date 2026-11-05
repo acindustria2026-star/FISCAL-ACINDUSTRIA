@@ -18,6 +18,7 @@ import {
 import { usePeriodo } from '../contexts/PeriodoContext';
 import { usePapel } from '../hooks/usePapel';
 import { brl, formatarData, kg as fmtKg } from '../lib/formatters';
+import { obterValorRealmentePago, obterDiferencaValor, formatarBRL } from '../lib/valoresRecebimento';
 import type { NotaFiscalRow } from '../types/database';
 
 type FiltroStatus = 'todos' | 'pago' | 'a-receber' | 'atrasado';
@@ -91,7 +92,7 @@ export default function Recebimentos() {
     return {
       qtd: arr.length,
       pesoLiquido: arr.reduce((s, r) => s + Number(r.peso_liquido), 0),
-      valorPago: arr.reduce((s, r) => s + Number(r.valor_pago), 0),
+      valorPago: arr.reduce((s, r) => s + obterValorRealmentePago(r), 0),
     };
   }, [filtrados]);
 
@@ -174,7 +175,7 @@ export default function Recebimentos() {
                   <th className="px-3 py-2.5 font-medium font-mono-num text-right">Peso bruto</th>
                   <th className="px-3 py-2.5 font-medium font-mono-num text-right">Impureza</th>
                   <th className="px-3 py-2.5 font-medium font-mono-num text-right">Peso líq.</th>
-                  <th className="px-3 py-2.5 font-medium font-mono-num text-right">Valor pago</th>
+                  <th className="px-3 py-2.5 font-medium font-mono-num text-right">Valor realmente pago</th>
                   <th className="px-3 py-2.5 font-medium">Status</th>
                   {podeEditarNFs && <th className="px-3 py-2.5 font-medium w-24" />}
                 </tr>
@@ -213,8 +214,17 @@ export default function Recebimentos() {
                       </td>
                       <td className="px-3 py-3 text-sm font-mono-num text-right">
                         <span className="font-serif-display text-base text-text">
-                          {brl(r.valor_pago)}
+                          {brl(obterValorRealmentePago(r))}
                         </span>
+                        {(() => {
+                          const dif = obterDiferencaValor(r);
+                          if (!dif) return null;
+                          return (
+                            <div className={`text-xs mt-0.5 ${dif > 0 ? 'text-accent' : 'text-warn'}`}>
+                              {dif > 0 ? '+' : ''}R$ {formatarBRL(dif)}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-3 py-3">
                         <StatusPill status={status} />

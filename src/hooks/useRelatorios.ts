@@ -4,6 +4,7 @@ import { usePeriodo } from '../contexts/PeriodoContext';
 import { useFinanceiro, type ItemFinanceiro } from './useFinanceiro';
 import { useComparativo, type ItemComparativo } from './useComparativo';
 import { useNfsEmAberto } from './useNfsEmAberto';
+import { obterValorRealmentePago } from '../lib/valoresRecebimento';
 import type { MotivoComplementar, NotaFiscalRow } from '../types/database';
 
 // ─── Impureza ──────────────────────────────────────────────────────────
@@ -132,7 +133,7 @@ export function useRelatorioNotasPagas(): {
     .filter((i: ItemFinanceiro) => i.categoria === 'pago' && i.rec !== null)
     .map((i) => ({
       nf: i.nf,
-      valorPago: Number(i.rec!.valor_pago) || 0,
+      valorPago: obterValorRealmentePago(i.rec!),
       dataPagamento: i.rec!.data_pagamento,
       cliente_nome: i.nf.cliente_nome,
     }));
@@ -160,7 +161,7 @@ export function useRelatorioPrecoReal(): {
     .filter((i: ItemFinanceiro) => i.rec !== null)
     .map((i) => {
       const peso = Number(i.nf.peso) || 0;
-      const valorPago = Number(i.rec!.valor_pago) || 0;
+      const valorPago = obterValorRealmentePago(i.rec!);
       return {
         nf: i.nf,
         pesoOrigem: peso,
@@ -225,6 +226,7 @@ export interface NfPrincipalConf {
 export interface RecebimentoConf {
   id: string;
   valor_pago: number;
+  valor_real_recebido?: number | null;
   data_pagamento: string | null;
   pago_em: string | null;
 }
@@ -354,7 +356,7 @@ export function useConferenciaComplementares() {
       // 4. Recebimentos PAGOS das principais
       const { data: recebimentos, error: errR } = await supabase
         .from('recebimentos')
-        .select('id, nf_id, valor_pago, data_pagamento, pago_em')
+        .select('id, nf_id, valor_pago, valor_real_recebido, data_pagamento, pago_em')
         .in('nf_id', idsPais)
         .eq('pago', true);
       if (errR) throw errR;
@@ -365,6 +367,7 @@ export function useConferenciaComplementares() {
         arr.push({
           id: r.id,
           valor_pago: num(r.valor_pago),
+          valor_real_recebido: r.valor_real_recebido != null ? num(r.valor_real_recebido) : null,
           data_pagamento: r.data_pagamento,
           pago_em: r.pago_em,
         });
@@ -388,7 +391,7 @@ export function useConferenciaComplementares() {
       const itens: ItemConferencia[] = lista.map((p) => {
         const valorNf = num(p.valor_final);
         const recs = recsByNf.get(p.id) ?? [];
-        const recebimentoPago = recs.reduce((s, r) => s + r.valor_pago, 0);
+        const recebimentoPago = recs.reduce((s, r) => s + obterValorRealmentePago(r), 0);
 
         const compls = complByNf.get(p.id) ?? [];
         const totalComplementares = compls.reduce((s, c) => s + c.valor_final, 0);

@@ -522,7 +522,7 @@ function ViewPagas({ sort, empresaIncompleta, onErroImpressao, empresa, periodoL
     return [
       { label: 'NFs pagas', valor: itens.length, tom: 'accent' },
       { label: 'Peso total', valor: fmtKg(totalPeso) },
-      { label: 'Valor pago total', valor: brl(totalValor), tom: 'accent' },
+      { label: 'Valor realmente pago', valor: brl(totalValor), tom: 'accent' },
       { label: 'R$/kg médio', valor: precoKgStr(precoMedio), tom: 'accent' },
     ];
   }, [itens]);
@@ -612,7 +612,7 @@ function ViewPagas({ sort, empresaIncompleta, onErroImpressao, empresa, periodoL
     },
     {
       key: 'valor_pago',
-      label: 'Valor pago',
+      label: 'Valor realmente pago',
       ordenavel: true,
       align: 'right',
       extrair: (i) => i.valorPago,
@@ -1205,7 +1205,7 @@ function ViewPrecoReal({
           </p>
         </Card>
         <Card className="p-4">
-          <p className="text-[11px] text-text-3 uppercase tracking-[0.12em]">Valor pago</p>
+          <p className="text-[11px] text-text-3 uppercase tracking-[0.12em]">Valor realmente pago</p>
           <p className="text-2xl font-medium font-mono-num mt-2 text-text">
             {brl(resumo.valorTotal)}
           </p>
@@ -1289,7 +1289,7 @@ function ViewPrecoReal({
                 <th className="px-3 py-2.5 font-medium">Cliente</th>
                 <th className="px-3 py-2.5 font-medium">Material</th>
                 <th className="px-3 py-2.5 font-medium text-right">Peso origem</th>
-                <th className="px-3 py-2.5 font-medium text-right">Valor pago</th>
+                <th className="px-3 py-2.5 font-medium text-right">Valor realmente pago</th>
                 <th className="px-3 py-2.5 font-medium text-right">Preço real</th>
               </tr>
             </thead>
