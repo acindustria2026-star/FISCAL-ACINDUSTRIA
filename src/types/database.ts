@@ -152,6 +152,26 @@ export type NotaFiscalRow = {
   updated_at: string;
 }
 
+export type NfItemRow = {
+  id: string;
+  empresa_id: string;
+  nf_id: string;
+  ordem: number;
+  material: string;
+  peso: number;
+  preco_negociado: number;
+  icms_pct: number;
+  pis_pct: number;
+  cofins_pct: number;
+  valor_negociado: number;
+  valor_final: number;
+  icms_valor: number;
+  pis_valor: number;
+  cofins_valor: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export type RecebimentoRow = {
   id: string;
   empresa_id: string;

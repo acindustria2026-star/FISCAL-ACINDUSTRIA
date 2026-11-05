@@ -109,7 +109,17 @@ export function TabelaNFs({
                       )}
                     </div>
                   </td>
-                  <td className="px-3 py-3 text-sm text-text-2">{nf.material ?? '—'}</td>
+                  <td className="px-3 py-3 text-sm text-text-2">
+                    {nf.material
+                      ? /^\d+ materiais$/.test(nf.material)
+                        ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs bg-surface-3 border border-border text-text-2 font-mono-num">
+                            {nf.material}
+                          </span>
+                        )
+                        : nf.material
+                      : '—'}
+                  </td>
                   <td className="px-3 py-3 text-sm text-text-2 font-mono-num text-right">
                     {fmtKg(nf.peso)}
                   </td>

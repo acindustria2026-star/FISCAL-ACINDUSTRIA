@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useForm } from 'react-hook-form';
+import { useEffect, useMemo, useState } from 'react';
+import { FormProvider, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ChevronDown, Truck } from 'lucide-react';
 import { Modal } from '../ui/Modal';
@@ -10,10 +10,6 @@ import { CampoComSugestoes, type SugestaoItem } from '../ui/CampoComSugestoes';
 import { useToast } from '../ui/Toast';
 import { useClientes, useCriarCliente } from '../../hooks/useClientes';
 import {
-  useCriarMaterial,
-  useMateriais,
-} from '../../hooks/useMateriais';
-import {
   useCriarNf,
   useEditarNf,
   useSubstituirNf,
@@ -21,9 +17,12 @@ import {
   type NfPayload,
 } from '../../hooks/useNfs';
 import { usePedidosAtivosDoCliente, type PedidoComEntregue } from '../../hooks/usePedidos';
-import { calcularImpostos, ALIQUOTAS_PADRAO } from '../../utils/calculos';
-import { brl, brl4, kg as fmtKg } from '../../lib/formatters';
-import { dataHojeISO, formatarData } from '../../lib/dataUtils';
+import { ALIQUOTAS_PADRAO } from '../../utils/calculos';
+import { brl, formatarData, kg as fmtKg } from '../../lib/formatters';
+import { dataHojeISO } from '../../lib/dataUtils';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import { ItensNF } from './ItensNF';
 import {
   MOTIVOS_COMPLEMENTAR,
   nfFormSchema,
@@ -31,7 +30,7 @@ import {
 } from '../../schemas/nf';
 import type {
   ClienteRow,
-  MaterialRow,
+  NfItemRow,
   MotivoComplementar,
   TipoFrete,
 } from '../../types/database';
@@ -49,8 +48,25 @@ interface Props {
 
 type ModoComp = 'nova' | 'substituir';
 
+function itemDeNf(nf: NfComRelacoes): NfFormData['itens'][0] {
+  return {
+    material: nf.material ?? '',
+    peso: String(nf.peso),
+    preco_negociado: String(nf.preco_negociado),
+    icms_ativo: nf.icms_ativo,
+    piscofins_ativo: nf.piscofins_ativo,
+    icms_pct_pp: String(Number(nf.icms_pct) * 100),
+    pis_pct_pp: String(Number(nf.pis_pct) * 100),
+    cofins_pct_pp: String(Number(nf.cofins_pct) * 100),
+  };
+}
+
 const formDefault = (ctx: ModalNfContexto): NfFormData => {
   const today = dataHojeISO();
+  const defaultIcms = String(ALIQUOTAS_PADRAO.ICMS * 100);
+  const defaultPis = String(ALIQUOTAS_PADRAO.PIS * 100);
+  const defaultCofins = String(ALIQUOTAS_PADRAO.COFINS * 100);
+
   if (ctx.kind === 'editar') {
     const n = ctx.nf;
     return {
@@ -59,8 +75,8 @@ const formDefault = (ctx: ModalNfContexto): NfFormData => {
       cliente_id: n.cliente_id,
       cliente_nome: n.cliente_nome,
       material: n.material ?? '',
-      peso: String(n.peso),
-      preco_negociado: String(n.preco_negociado),
+      peso: '0',
+      preco_negociado: '0',
       icms_ativo: n.icms_ativo,
       piscofins_ativo: n.piscofins_ativo,
       icms_pct_pp: String(Number(n.icms_pct) * 100),
@@ -76,6 +92,7 @@ const formDefault = (ctx: ModalNfContexto): NfFormData => {
       motivo_complementar: n.motivo_complementar,
       nf_pai_id: n.nf_pai_id,
       nf_pai_numero: n.nf_pai_numero,
+      itens: [itemDeNf(n)],
     };
   }
   if (ctx.kind === 'complementar') {
@@ -86,8 +103,8 @@ const formDefault = (ctx: ModalNfContexto): NfFormData => {
       cliente_id: p.cliente_id,
       cliente_nome: p.cliente_nome,
       material: p.material ?? '',
-      peso: String(p.peso),
-      preco_negociado: String(p.preco_negociado),
+      peso: '0',
+      preco_negociado: '0',
       icms_ativo: p.icms_ativo,
       piscofins_ativo: p.piscofins_ativo,
       icms_pct_pp: String(Number(p.icms_pct) * 100),
@@ -103,6 +120,7 @@ const formDefault = (ctx: ModalNfContexto): NfFormData => {
       motivo_complementar: 'PESO',
       nf_pai_id: p.id,
       nf_pai_numero: p.numero,
+      itens: [itemDeNf(p)],
     };
   }
   return {
@@ -111,13 +129,13 @@ const formDefault = (ctx: ModalNfContexto): NfFormData => {
     cliente_id: null,
     cliente_nome: '',
     material: '',
-    peso: '',
-    preco_negociado: '',
+    peso: '0',
+    preco_negociado: '0',
     icms_ativo: true,
     piscofins_ativo: true,
-    icms_pct_pp: String(ALIQUOTAS_PADRAO.ICMS * 100),
-    pis_pct_pp: String(ALIQUOTAS_PADRAO.PIS * 100),
-    cofins_pct_pp: String(ALIQUOTAS_PADRAO.COFINS * 100),
+    icms_pct_pp: defaultIcms,
+    pis_pct_pp: defaultPis,
+    cofins_pct_pp: defaultCofins,
     tipo_frete: null,
     transportadora: '',
     placa_veiculo: '',
@@ -128,6 +146,16 @@ const formDefault = (ctx: ModalNfContexto): NfFormData => {
     motivo_complementar: null,
     nf_pai_id: null,
     nf_pai_numero: null,
+    itens: [{
+      material: '',
+      peso: '',
+      preco_negociado: '',
+      icms_ativo: true,
+      piscofins_ativo: true,
+      icms_pct_pp: defaultIcms,
+      pis_pct_pp: defaultPis,
+      cofins_pct_pp: defaultCofins,
+    }],
   };
 };
 
@@ -148,17 +176,15 @@ export function ModalNF({ open, onClose, contexto }: Props) {
 
 function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: ModalNfContexto }) {
   const toast = useToast();
+  const { perfil } = useAuth();
   const clientes = useClientes();
-  const materiais = useMateriais();
   const criarCliente = useCriarCliente();
-  const criarMaterial = useCriarMaterial();
   const criarNf = useCriarNf();
   const editarNf = useEditarNf();
   const substituirNf = useSubstituirNf();
 
   const [modoComp, setModoComp] = useState<ModoComp>('nova');
   const [transporteAberto, setTransporteAberto] = useState(false);
-  const [tabImposto, setTabImposto] = useState<'ICMS' | 'PISCOFINS'>('ICMS');
 
   const form = useForm<NfFormData>({
     resolver: zodResolver(nfFormSchema),
@@ -166,50 +192,45 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
   });
 
   useEffect(() => {
-    if (contexto.kind === 'editar' && contexto.nf) {
+    if (contexto.kind === 'editar') {
       const tem =
         contexto.nf.transportadora ||
         contexto.nf.placa_veiculo ||
         contexto.nf.motorista ||
         contexto.nf.tipo_frete;
       if (tem) setTransporteAberto(true);
+
+      // Load existing nf_itens from DB
+      supabase
+        .from('nf_itens')
+        .select('*')
+        .eq('nf_id', contexto.nf.id)
+        .order('ordem')
+        .then(({ data }) => {
+          if (!data || data.length === 0) return;
+          form.setValue(
+            'itens',
+            (data as NfItemRow[]).map((item) => ({
+              material: item.material,
+              peso: String(item.peso),
+              preco_negociado: String(item.preco_negociado),
+              icms_ativo: Number(item.icms_pct) > 0,
+              piscofins_ativo: Number(item.pis_pct) > 0 || Number(item.cofins_pct) > 0,
+              icms_pct_pp: String(Math.round(Number(item.icms_pct) * 100 * 10000) / 10000),
+              pis_pct_pp: String(Math.round(Number(item.pis_pct) * 100 * 10000) / 10000),
+              cofins_pct_pp: String(Math.round(Number(item.cofins_pct) * 100 * 10000) / 10000),
+            })),
+          );
+        });
     }
-  }, [contexto]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const valores = form.watch();
-
-  const calc = useMemo(() => {
-    const peso = Number(String(valores.peso).replace(',', '.')) || 0;
-    const preco = Number(String(valores.preco_negociado).replace(',', '.')) || 0;
-    const icms = Number(String(valores.icms_pct_pp).replace(',', '.')) || 0;
-    const pis = Number(String(valores.pis_pct_pp).replace(',', '.')) || 0;
-    const cofins = Number(String(valores.cofins_pct_pp).replace(',', '.')) || 0;
-    return calcularImpostos({
-      peso,
-      precoNegociado: preco,
-      icmsAtivo: valores.icms_ativo,
-      piscofinsAtivo: valores.piscofins_ativo,
-      icmsPct: icms / 100,
-      pisPct: pis / 100,
-      cofinsPct: cofins / 100,
-    });
-  }, [
-    valores.peso,
-    valores.preco_negociado,
-    valores.icms_ativo,
-    valores.piscofins_ativo,
-    valores.icms_pct_pp,
-    valores.pis_pct_pp,
-    valores.cofins_pct_pp,
-  ]);
 
   const sugestoesClientes = useMemo<SugestaoItem<ClienteRow>[]>(
     () => (clientes.data ?? []).map((c) => ({ id: c.id, label: c.nome, payload: c })),
     [clientes.data],
-  );
-  const sugestoesMateriais = useMemo<SugestaoItem<MaterialRow>[]>(
-    () => (materiais.data ?? []).map((m) => ({ id: m.id, label: m.nome, payload: m })),
-    [materiais.data],
   );
 
   function onSelectCliente(item: SugestaoItem<ClienteRow>) {
@@ -235,35 +256,92 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
     }
   }
 
-  function onSelectMaterial(item: SugestaoItem<MaterialRow>) {
-    form.setValue('material', item.payload.nome, { shouldValidate: true });
-    form.setValue('icms_pct_pp', String(Number(item.payload.icms_padrao)), { shouldValidate: true });
-    form.setValue('pis_pct_pp', String(Number(item.payload.pis_padrao)), { shouldValidate: true });
-    form.setValue('cofins_pct_pp', String(Number(item.payload.cofins_padrao)), { shouldValidate: true });
-  }
+  async function salvarItens(nfId: string, itens: Array<{
+    material: string;
+    peso: number;
+    preco_negociado: number;
+    icms_ativo: boolean;
+    piscofins_ativo: boolean;
+    icms_pct_pp: number;
+    pis_pct_pp: number;
+    cofins_pct_pp: number;
+  }>) {
+    if (!perfil) throw new Error('Não autenticado');
 
-  async function onCriarMaterial(nome: string) {
-    try {
-      const novo = await criarMaterial.mutateAsync({
-        nome,
-        icms_padrao: 18,
-        pis_padrao: 1.65,
-        cofins_padrao: 7.6,
-      });
-      form.setValue('material', novo.nome, { shouldValidate: true });
-      toast.success(`Material "${nome}" criado`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao criar material');
+    await supabase.from('nf_itens').delete().eq('nf_id', nfId);
+
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const r4 = (n: number) => Math.round(n * 10000) / 10000;
+
+    const inserir = itens.map((item, idx) => {
+      const icmsPct = item.icms_ativo ? item.icms_pct_pp / 100 : 0;
+      const pisPct = item.piscofins_ativo ? item.pis_pct_pp / 100 : 0;
+      const cofinsPct = item.piscofins_ativo ? item.cofins_pct_pp / 100 : 0;
+      const totalPct = icmsPct + pisPct + cofinsPct;
+      const valorNeg = item.peso * item.preco_negociado;
+      const valorFinal = totalPct > 0 && totalPct < 1 ? valorNeg / (1 - totalPct) : valorNeg;
+      return {
+        empresa_id: perfil.empresa_id,
+        nf_id: nfId,
+        ordem: idx + 1,
+        material: item.material,
+        peso: item.peso,
+        preco_negociado: item.preco_negociado,
+        icms_pct: icmsPct,
+        pis_pct: pisPct,
+        cofins_pct: cofinsPct,
+        valor_final: r2(valorFinal),
+        icms_valor: r2(valorFinal * icmsPct),
+        pis_valor: r2(valorFinal * pisPct),
+        cofins_valor: r2(valorFinal * cofinsPct),
+      };
+    });
+
+    const { error: insError } = await supabase.from('nf_itens').insert(inserir);
+    if (insError) throw new Error(insError.message);
+
+    const totalPeso = itens.reduce((s, i) => s + i.peso, 0);
+    const totalValorFinal = inserir.reduce((s, i) => s + i.valor_final, 0);
+    const totalValorNeg = itens.reduce((s, i) => s + i.peso * i.preco_negociado, 0);
+    const totalIcms = inserir.reduce((s, i) => s + i.icms_valor, 0);
+    const totalPis = inserir.reduce((s, i) => s + i.pis_valor, 0);
+    const totalCofins = inserir.reduce((s, i) => s + i.cofins_valor, 0);
+    const primeiroItem = itens[0];
+    const precoFinalKg = totalPeso > 0 ? r4(totalValorFinal / totalPeso) : 0;
+
+    const updateData: Record<string, unknown> = {
+      material: itens.length === 1 ? primeiroItem.material : `${itens.length} materiais`,
+      peso: totalPeso,
+      preco_negociado: itens.length === 1 ? primeiroItem.preco_negociado : 0,
+      valor_negociado: r2(totalValorNeg),
+      valor_final: r2(totalValorFinal),
+      icms: r2(totalIcms),
+      pis: r2(totalPis),
+      cofins: r2(totalCofins),
+      total_impostos: r2(totalIcms + totalPis + totalCofins),
+      preco_final_kg: precoFinalKg,
+    };
+    if (itens.length === 1) {
+      updateData.icms_ativo = primeiroItem.icms_ativo;
+      updateData.piscofins_ativo = primeiroItem.piscofins_ativo;
+      updateData.icms_pct = primeiroItem.icms_ativo ? primeiroItem.icms_pct_pp / 100 : 0;
+      updateData.pis_pct = primeiroItem.piscofins_ativo ? primeiroItem.pis_pct_pp / 100 : 0;
+      updateData.cofins_pct = primeiroItem.piscofins_ativo ? primeiroItem.cofins_pct_pp / 100 : 0;
     }
+
+    const { error: updError } = await supabase
+      .from('notas_fiscais')
+      .update(updateData)
+      .eq('id', nfId);
+    if (updError) throw new Error(updError.message);
   }
 
   async function onSubmit(d: NfFormData) {
     const calcData = nfFormSchema.parse(d);
+    const itens = calcData.itens;
+    const primeiroItem = itens[0];
+    const totalPeso = itens.reduce((s, i) => s + i.peso, 0);
 
-    // Vínculo de NF complementar: ao EDITAR, preserva o vínculo original
-    // da NF (impede que o salvar acidentalmente transforme uma complementar
-    // em NF principal). Ao CRIAR complementar nova, seta a partir do pai.
-    // Ao SUBSTITUIR ou CRIAR comum, fica null.
     const vinculoComplementar = (() => {
       if (contexto.kind === 'editar') {
         return {
@@ -287,14 +365,14 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
       data: calcData.data,
       cliente_id: calcData.cliente_id,
       cliente_nome: calcData.cliente_nome,
-      material: calcData.material?.trim() || null,
-      peso: calcData.peso,
-      preco_negociado: calcData.preco_negociado,
-      icms_ativo: calcData.icms_ativo,
-      piscofins_ativo: calcData.piscofins_ativo,
-      icms_pct: calcData.icms_pct_pp / 100,
-      pis_pct: calcData.pis_pct_pp / 100,
-      cofins_pct: calcData.cofins_pct_pp / 100,
+      material: itens.length === 1 ? (primeiroItem.material || null) : `${itens.length} materiais`,
+      peso: totalPeso,
+      preco_negociado: itens.length === 1 ? primeiroItem.preco_negociado : 0,
+      icms_ativo: primeiroItem.icms_ativo,
+      piscofins_ativo: primeiroItem.piscofins_ativo,
+      icms_pct: primeiroItem.icms_ativo ? primeiroItem.icms_pct_pp / 100 : 0,
+      pis_pct: primeiroItem.piscofins_ativo ? primeiroItem.pis_pct_pp / 100 : 0,
+      cofins_pct: primeiroItem.piscofins_ativo ? primeiroItem.cofins_pct_pp / 100 : 0,
       tipo_frete: calcData.tipo_frete ?? null,
       transportadora: calcData.transportadora?.trim() || null,
       placa_veiculo: calcData.placa_veiculo?.trim() || null,
@@ -306,17 +384,26 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
     };
 
     try {
+      let nfId: string;
+      let successMsg: string;
+
       if (contexto.kind === 'editar') {
-        await editarNf.mutateAsync({ id: contexto.nf.id, dados: payload });
-        toast.success('NF atualizada');
+        const result = await editarNf.mutateAsync({ id: contexto.nf.id, dados: payload });
+        nfId = (result as { id: string }).id;
+        successMsg = 'NF atualizada';
       } else if (contexto.kind === 'complementar' && modoComp === 'substituir') {
         const motivo = (calcData.motivo_complementar ?? 'OUTRO') as MotivoComplementar;
-        await substituirNf.mutateAsync({ id: contexto.pai.id, dados: payload, motivo });
-        toast.success('NF substituída');
+        const result = await substituirNf.mutateAsync({ id: contexto.pai.id, dados: payload, motivo });
+        nfId = (result as { id: string }).id;
+        successMsg = 'NF substituída';
       } else {
-        await criarNf.mutateAsync(payload);
-        toast.success('NF criada');
+        const result = await criarNf.mutateAsync(payload);
+        nfId = (result as { id: string }).id;
+        successMsg = 'NF criada';
       }
+
+      await salvarItens(nfId, itens);
+      toast.success(successMsg);
       onClose();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao salvar');
@@ -327,153 +414,115 @@ function ModalNFInner({ onClose, contexto }: { onClose: () => void; contexto: Mo
   const salvando = criarNf.isPending || editarNf.isPending || substituirNf.isPending;
   const titulo = tituloDe(contexto, modoComp);
 
+  const pesoAtualItens = useMemo(() => {
+    return (valores.itens ?? []).reduce(
+      (s, i) => s + (Number(String(i?.peso ?? '0').replace(',', '.')) || 0),
+      0,
+    );
+  }, [valores.itens]);
+
   return (
-    <Modal
-      open
-      onClose={salvando ? () => {} : onClose}
-      title={titulo}
-      size="lg"
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose} disabled={salvando}>
-            Cancelar
-          </Button>
-          <Button onClick={form.handleSubmit(onSubmit)} loading={salvando}>
-            Salvar
-          </Button>
-        </>
-      }
-    >
-      <form className="flex flex-col gap-5" onSubmit={form.handleSubmit(onSubmit)}>
-        {ehComplementar && (
-          <BannerComplementar
-            pai={(contexto as { pai: NfComRelacoes }).pai}
-            modo={modoComp}
-            onModoChange={setModoComp}
-            motivo={valores.motivo_complementar ?? 'PESO'}
-            onMotivoChange={(m) =>
-              form.setValue('motivo_complementar', m, { shouldValidate: true })
-            }
+    <FormProvider {...form}>
+      <Modal
+        open
+        onClose={salvando ? () => {} : onClose}
+        title={titulo}
+        size="lg"
+        footer={
+          <>
+            <Button variant="ghost" onClick={onClose} disabled={salvando}>
+              Cancelar
+            </Button>
+            <Button onClick={form.handleSubmit(onSubmit)} loading={salvando}>
+              Salvar
+            </Button>
+          </>
+        }
+      >
+        <form className="flex flex-col gap-5" onSubmit={form.handleSubmit(onSubmit)}>
+          {ehComplementar && (
+            <BannerComplementar
+              pai={(contexto as { pai: NfComRelacoes }).pai}
+              modo={modoComp}
+              onModoChange={setModoComp}
+              motivo={valores.motivo_complementar ?? 'PESO'}
+              onMotivoChange={(m) =>
+                form.setValue('motivo_complementar', m, { shouldValidate: true })
+              }
+            />
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Input
+              label="Número *"
+              {...form.register('numero')}
+              error={form.formState.errors.numero?.message}
+              autoFocus
+            />
+            <Input
+              label="Data *"
+              type="date"
+              {...form.register('data')}
+              error={form.formState.errors.data?.message}
+            />
+            <div />
+          </div>
+
+          <CampoComSugestoes
+            label="Cliente *"
+            value={valores.cliente_nome}
+            onChange={(v) => {
+              form.setValue('cliente_nome', v, { shouldValidate: true });
+              const match = sugestoesClientes.find(
+                (s) => s.label.toLowerCase() === v.trim().toLowerCase(),
+              );
+              form.setValue('cliente_id', match?.payload.id ?? null);
+            }}
+            onSelect={onSelectCliente}
+            onCriar={onCriarCliente}
+            sugestoes={sugestoesClientes}
+            permitirNovo
+            placeholder="Digite ou selecione"
+            error={form.formState.errors.cliente_nome?.message}
           />
-        )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Input
-            label="Número *"
-            {...form.register('numero')}
-            error={form.formState.errors.numero?.message}
-            autoFocus
+          <SecaoPedido
+            clienteId={valores.cliente_id}
+            pedidoIdAtual={valores.pedido_id ?? null}
+            pesoAtual={pesoAtualItens}
+            nfIdAtual={contexto.kind === 'editar' ? contexto.nf.id : null}
+            onSelect={(p) => {
+              form.setValue('pedido_id', p?.id ?? null, { shouldValidate: true });
+              form.setValue('pedido_numero', p?.numero ?? null);
+            }}
           />
-          <Input
-            label="Data *"
-            type="date"
-            {...form.register('data')}
-            error={form.formState.errors.data?.message}
+
+          <ItensNF />
+
+          <SecaoTransporte
+            aberto={transporteAberto}
+            onToggle={() => setTransporteAberto((a) => !a)}
+            tipoFrete={valores.tipo_frete ?? null}
+            onTipoFreteChange={(t) => form.setValue('tipo_frete', t)}
+            register={form.register}
           />
-          <div /> {/* spacer */}
-        </div>
 
-        <CampoComSugestoes
-          label="Cliente *"
-          value={valores.cliente_nome}
-          onChange={(v) => {
-            form.setValue('cliente_nome', v, { shouldValidate: true });
-            const match = sugestoesClientes.find(
-              (s) => s.label.toLowerCase() === v.trim().toLowerCase(),
-            );
-            form.setValue('cliente_id', match?.payload.id ?? null);
-          }}
-          onSelect={onSelectCliente}
-          onCriar={onCriarCliente}
-          sugestoes={sugestoesClientes}
-          permitirNovo
-          placeholder="Digite ou selecione"
-          error={form.formState.errors.cliente_nome?.message}
-        />
+          <div>
+            <label className="text-sm text-text-2 font-medium">Observações</label>
+            <textarea
+              {...form.register('observacoes')}
+              rows={3}
+              className="w-full mt-1.5 bg-surface-2 border border-border rounded-xl px-3.5 py-2.5 text-text placeholder:text-text-3 outline-none focus:border-accent transition resize-none"
+              placeholder="Notas internas..."
+            />
+          </div>
 
-        <CampoComSugestoes
-          label="Material"
-          value={valores.material ?? ''}
-          onChange={(v) => form.setValue('material', v, { shouldValidate: true })}
-          onSelect={onSelectMaterial}
-          onCriar={onCriarMaterial}
-          sugestoes={sugestoesMateriais}
-          permitirNovo
-          placeholder="Sucata ferrosa, alumínio..."
-          helper="Selecionar um material preenche as alíquotas padrão"
-        />
+          {contexto.kind === 'editar' && <CriadoEditadoPor nf={contexto.nf} />}
 
-        <SecaoPedido
-          clienteId={valores.cliente_id}
-          pedidoIdAtual={valores.pedido_id ?? null}
-          pesoAtual={Number(String(valores.peso ?? '0').replace(',', '.')) || 0}
-          nfIdAtual={contexto.kind === 'editar' ? contexto.nf.id : null}
-          onSelect={(p) => {
-            form.setValue('pedido_id', p?.id ?? null, { shouldValidate: true });
-            form.setValue('pedido_numero', p?.numero ?? null);
-          }}
-        />
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input
-            label="Peso (kg) *"
-            type="number"
-            step="0.001"
-            {...form.register('peso')}
-            error={form.formState.errors.peso?.message}
-          />
-          <Input
-            label="Preço negociado (R$/kg) *"
-            type="number"
-            step="0.0001"
-            {...form.register('preco_negociado')}
-            error={form.formState.errors.preco_negociado?.message}
-          />
-        </div>
-
-        <SecaoImpostos
-          icmsAtivo={valores.icms_ativo}
-          piscofinsAtivo={valores.piscofins_ativo}
-          tab={tabImposto}
-          onTabChange={setTabImposto}
-          onToggle={(qual, on) => {
-            if (qual === 'ICMS') form.setValue('icms_ativo', on);
-            else form.setValue('piscofins_ativo', on);
-          }}
-          icmsPP={String(valores.icms_pct_pp ?? '')}
-          pisPP={String(valores.pis_pct_pp ?? '')}
-          cofinsPP={String(valores.cofins_pct_pp ?? '')}
-          onChangePP={(qual, v) => {
-            const key = qual === 'ICMS' ? 'icms_pct_pp' : qual === 'PIS' ? 'pis_pct_pp' : 'cofins_pct_pp';
-            form.setValue(key, v, { shouldValidate: true });
-          }}
-        />
-
-        <CardValorFinal calc={calc} />
-
-        <SecaoTransporte
-          aberto={transporteAberto}
-          onToggle={() => setTransporteAberto((a) => !a)}
-          tipoFrete={valores.tipo_frete ?? null}
-          onTipoFreteChange={(t) => form.setValue('tipo_frete', t)}
-          register={form.register}
-        />
-
-        <div>
-          <label className="text-sm text-text-2 font-medium">Observações</label>
-          <textarea
-            {...form.register('observacoes')}
-            rows={3}
-            className="w-full mt-1.5 bg-surface-2 border border-border rounded-xl px-3.5 py-2.5 text-text placeholder:text-text-3 outline-none focus:border-accent transition resize-none"
-            placeholder="Notas internas..."
-          />
-        </div>
-
-        {contexto.kind === 'editar' && <CriadoEditadoPor nf={contexto.nf} />}
-
-        <button type="submit" className="hidden" />
-      </form>
-    </Modal>
+          <button type="submit" className="hidden" />
+        </form>
+      </Modal>
+    </FormProvider>
   );
 }
 
@@ -569,196 +618,6 @@ function RadioCard({
   );
 }
 
-function SecaoImpostos({
-  icmsAtivo,
-  piscofinsAtivo,
-  tab,
-  onTabChange,
-  onToggle,
-  icmsPP,
-  pisPP,
-  cofinsPP,
-  onChangePP,
-}: {
-  icmsAtivo: boolean;
-  piscofinsAtivo: boolean;
-  tab: 'ICMS' | 'PISCOFINS';
-  onTabChange: (t: 'ICMS' | 'PISCOFINS') => void;
-  onToggle: (qual: 'ICMS' | 'PISCOFINS', on: boolean) => void;
-  icmsPP: string;
-  pisPP: string;
-  cofinsPP: string;
-  onChangePP: (qual: 'ICMS' | 'PIS' | 'COFINS', v: string) => void;
-}) {
-  return (
-    <Card className="p-4">
-      <p className="text-xs uppercase tracking-[0.16em] text-text-3 mb-3">Impostos a agregar</p>
-      <div className="flex items-center gap-2 mb-3">
-        <AbaImposto
-          label={`ICMS${!icmsAtivo ? ' · off' : ''}`}
-          ativo={tab === 'ICMS'}
-          dim={!icmsAtivo}
-          onClick={() => onTabChange('ICMS')}
-        />
-        <AbaImposto
-          label={`PIS+COFINS${!piscofinsAtivo ? ' · off' : ''}`}
-          ativo={tab === 'PISCOFINS'}
-          dim={!piscofinsAtivo}
-          onClick={() => onTabChange('PISCOFINS')}
-        />
-      </div>
-
-      {tab === 'ICMS' ? (
-        <div className="flex items-end gap-3">
-          <ToggleSwitch
-            label="Aplicar ICMS"
-            ativo={icmsAtivo}
-            onChange={(v) => onToggle('ICMS', v)}
-          />
-          <Input
-            label="Alíquota ICMS (%)"
-            type="number"
-            step="0.01"
-            value={icmsPP}
-            onChange={(e) => onChangePP('ICMS', e.target.value)}
-            disabled={!icmsAtivo}
-            className="max-w-[12rem]"
-          />
-        </div>
-      ) : (
-        <div className="flex flex-col sm:flex-row items-end gap-3">
-          <ToggleSwitch
-            label="Aplicar PIS/COFINS"
-            ativo={piscofinsAtivo}
-            onChange={(v) => onToggle('PISCOFINS', v)}
-          />
-          <Input
-            label="PIS (%)"
-            type="number"
-            step="0.01"
-            value={pisPP}
-            onChange={(e) => onChangePP('PIS', e.target.value)}
-            disabled={!piscofinsAtivo}
-          />
-          <Input
-            label="COFINS (%)"
-            type="number"
-            step="0.01"
-            value={cofinsPP}
-            onChange={(e) => onChangePP('COFINS', e.target.value)}
-            disabled={!piscofinsAtivo}
-          />
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function AbaImposto({
-  label,
-  ativo,
-  dim,
-  onClick,
-}: {
-  label: string;
-  ativo: boolean;
-  dim: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`px-3 h-8 rounded-lg text-xs transition ${
-        ativo ? 'bg-accent text-[#0B0B0D]' : 'bg-surface-2 text-text-2 hover:text-text'
-      } ${dim && !ativo ? 'opacity-40' : ''}`}
-    >
-      {label}
-    </button>
-  );
-}
-
-function ToggleSwitch({
-  label,
-  ativo,
-  onChange,
-}: {
-  label: string;
-  ativo: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!ativo)}
-      className="flex items-center gap-2.5 h-11 px-1"
-      role="switch"
-      aria-checked={ativo}
-    >
-      <span
-        className={`relative w-10 h-6 rounded-full transition ${
-          ativo ? 'bg-accent' : 'bg-surface-3'
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition ${
-            ativo ? 'translate-x-4' : ''
-          }`}
-        />
-      </span>
-      <span className="text-sm text-text-2">{label}</span>
-    </button>
-  );
-}
-
-function CardValorFinal({ calc }: { calc: ReturnType<typeof calcularImpostos> }) {
-  return (
-    <div className="relative overflow-hidden rounded-[14px] border border-accent-soft-border p-6"
-      style={{ background: 'linear-gradient(135deg, #2A2010 0%, transparent 100%)' }}
-    >
-      <div
-        className="absolute -top-1/2 -right-[20%] w-52 h-52 pointer-events-none"
-        style={{
-          background: 'radial-gradient(circle, #D4A017 0%, transparent 70%)',
-          opacity: 0.18,
-        }}
-      />
-      <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.16em] text-accent mb-1">Valor final</p>
-          <p
-            className="font-serif-display font-mono-num"
-            style={{
-              fontSize: 40,
-              lineHeight: 1.1,
-              background: 'linear-gradient(135deg, #F5C44A 0%, #D4A017 100%)',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              color: 'transparent',
-            }}
-          >
-            {brl(calc.valorFinal)}
-          </p>
-          <p className="text-xs text-text-3 mt-1 font-mono-num">
-            {fmtKg(Number.isFinite(calc.valorFinal) ? (calc.precoFinalKg ? Number(calc.precoFinalKg) : 0) : 0).replace(' kg', '')}{' '}
-            · preço final {brl4(calc.precoFinalKg)}/kg
-          </p>
-        </div>
-        <div className="grid grid-cols-3 gap-3 text-right text-xs">
-          <Mini label="Negociado" valor={brl(calc.valorNegociado)} />
-          <Mini label="Impostos" valor={brl(calc.totalImpostos)} />
-          <Mini
-            label="Alíquota"
-            valor={`${(calc.totalAlqDecimal * 100).toLocaleString('pt-BR', {
-              maximumFractionDigits: 2,
-            })}%`}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function CriadoEditadoPor({ nf }: { nf: NfComRelacoes }) {
   function relativo(iso: string | null): string {
     if (!iso) return '';
@@ -782,14 +641,6 @@ function CriadoEditadoPor({ nf }: { nf: NfComRelacoes }) {
   );
 }
 
-function Mini({ label, valor }: { label: string; valor: ReactNode }) {
-  return (
-    <div>
-      <p className="text-text-3 uppercase tracking-wider">{label}</p>
-      <p className="font-mono-num text-text mt-0.5">{valor}</p>
-    </div>
-  );
-}
 
 function SecaoTransporte({
   aberto,
@@ -861,7 +712,6 @@ function SecaoPedido({
 }) {
   const pedidos = usePedidosAtivosDoCliente(clienteId);
 
-  // Inclui o pedido atual se já vinculado mas não está mais "ativo" (pra editar funcionar)
   const selecionado = useMemo(
     () => pedidos.find((p) => p.id === pedidoIdAtual) ?? null,
     [pedidos, pedidoIdAtual],
@@ -876,7 +726,6 @@ function SecaoPedido({
 
   if (!clienteId || pedidos.length === 0) {
     if (!pedidoIdAtual) return null;
-    // Edição com pedido vinculado mas cliente sem pedidos ativos (já concluído talvez)
     return null;
   }
 

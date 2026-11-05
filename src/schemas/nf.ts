@@ -14,6 +14,12 @@ function preprocessNumero(unknownInput: unknown): number {
   return Number(unknownInput);
 }
 
+function preprocessNumeroOuZero(unknownInput: unknown): number {
+  if (unknownInput === '' || unknownInput === null || unknownInput === undefined) return 0;
+  const n = preprocessNumero(unknownInput);
+  return Number.isNaN(n) ? 0 : n;
+}
+
 const numeroPositivo = z.preprocess(
   preprocessNumero,
   z.number().positive('Valor deve ser maior que zero'),
@@ -24,14 +30,36 @@ const numeroPctPP = z.preprocess(
   z.number().min(0, 'Não pode ser negativo').max(100, 'Máximo 100%'),
 );
 
+export const itemNFSchema = z.object({
+  material: z.string().min(1, 'Material obrigatório'),
+  peso: z.preprocess(preprocessNumero, z.number().positive('Peso deve ser maior que zero')),
+  preco_negociado: z.preprocess(preprocessNumero, z.number().positive('Preço deve ser maior que zero')),
+  icms_ativo: z.boolean(),
+  piscofins_ativo: z.boolean(),
+  icms_pct_pp: numeroPctPP,
+  pis_pct_pp: numeroPctPP,
+  cofins_pct_pp: numeroPctPP,
+});
+
+export type ItemNFFormData = {
+  material: string;
+  peso: string | number;
+  preco_negociado: string | number;
+  icms_ativo: boolean;
+  piscofins_ativo: boolean;
+  icms_pct_pp: string | number;
+  pis_pct_pp: string | number;
+  cofins_pct_pp: string | number;
+};
+
 export const nfFormSchema = z.object({
   numero: z.string().min(1, 'Número obrigatório').trim(),
   data: z.string().min(8, 'Data obrigatória'),
   cliente_id: z.string().nullable(),
   cliente_nome: z.string().min(2, 'Cliente obrigatório'),
   material: z.string().nullable().optional(),
-  peso: numeroPositivo,
-  preco_negociado: numeroPositivo,
+  peso: z.preprocess(preprocessNumeroOuZero, z.number().min(0)),
+  preco_negociado: z.preprocess(preprocessNumeroOuZero, z.number().min(0)),
   icms_ativo: z.boolean(),
   piscofins_ativo: z.boolean(),
   icms_pct_pp: numeroPctPP,
@@ -47,6 +75,7 @@ export const nfFormSchema = z.object({
   motivo_complementar: z.enum(['PESO', 'PRECO', 'IMPOSTO', 'OUTRO']).nullable().optional(),
   nf_pai_id: z.string().nullable().optional(),
   nf_pai_numero: z.string().nullable().optional(),
+  itens: z.array(itemNFSchema).min(1, 'Adicione ao menos 1 item'),
 });
 
 /**
@@ -77,6 +106,7 @@ export type NfFormData = {
   motivo_complementar?: 'PESO' | 'PRECO' | 'IMPOSTO' | 'OUTRO' | null;
   nf_pai_id?: string | null;
   nf_pai_numero?: string | null;
+  itens: ItemNFFormData[];
 };
 
 export type NfFormParsed = z.output<typeof nfFormSchema>;
